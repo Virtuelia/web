@@ -21,9 +21,15 @@ const characters = [
 ---
 
 <DashboardLayout title="Auto-Generate Story">
-  <div class="mb-6">
-    <a href="/dashboard/stories/new" class="text-sm text-[var(--color-v-teal)] hover:underline">
-      ← Manual mode
+  <div class="mb-6 grid grid-cols-2 gap-4 max-w-3xl">
+    <div class="block p-5 bg-[var(--color-v-teal)] text-white rounded-xl relative">
+      <span class="absolute top-3 right-3 text-xs bg-white text-[var(--color-v-teal)] px-2 py-0.5 rounded-full font-medium">Selected</span>
+      <p class="text-lg font-bold mb-1">✨ Auto</p>
+      <p class="text-sm opacity-90">Write a plot → Claude generates everything</p>
+    </div>
+    <a href="/dashboard/stories/new" class="block p-5 bg-white border-2 border-gray-200 rounded-xl hover:border-[var(--color-v-teal)] transition-colors">
+      <p class="text-lg font-bold text-[var(--color-v-dark)] mb-1">✏️ Manual</p>
+      <p class="text-sm text-[var(--color-v-gray)]">Fill in fields yourself — for custom stories</p>
     </a>
   </div>
 
