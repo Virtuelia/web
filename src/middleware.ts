@@ -2,6 +2,7 @@ import { defineMiddleware } from 'astro:middleware';
 import { createServerClient } from './lib/supabase';
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  try {
   const runtime = (context.locals as any).runtime?.env;
   const supabaseUrl = runtime?.PUBLIC_SUPABASE_URL ?? import.meta.env.PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = runtime?.PUBLIC_SUPABASE_ANON_KEY ?? import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
@@ -42,4 +43,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   return next();
+  } catch (e: any) {
+    return new Response(`Middleware error: ${e?.message ?? String(e)}\n\nStack: ${e?.stack ?? ''}`, { status: 500 });
+  }
 });
