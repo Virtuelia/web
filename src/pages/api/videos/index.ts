@@ -16,7 +16,7 @@ export const GET: APIRoute = async ({ locals, url }) => {
 
     let query = supabase
       .from('videos')
-      .select('*, country(*), stories(id)', { count: 'exact' });
+      .select('*, country:countries(*), stories(id)', { count: 'exact' });
 
     if (status) {
       query = query.eq('status', status);

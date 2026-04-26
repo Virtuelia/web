@@ -11,7 +11,7 @@ const { data: video, error: videoError } = await supabase
   .from('videos')
   .select(`
     *,
-    country(*)
+    country:countries(*)
   `)
   .eq('id', id)
   .single();

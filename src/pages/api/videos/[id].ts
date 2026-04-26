@@ -13,7 +13,7 @@ export const GET: APIRoute = async ({ locals, params }) => {
       .from('videos')
       .select(`
         *,
-        country(*),
+        country:countries(*),
         stories(
           *,
           beats: story_beats(*)
