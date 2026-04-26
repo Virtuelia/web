@@ -1,0 +1,363 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { CHARACTER_LABELS, COMPETENCY_LABELS } from '@/lib/helpers';
+
+const supabase = Astro.locals.supabase;
+
+const { data: countries } = await supabase
+  .from('countries')
+  .select('id, name, code')
+  .order('name');
+
+const countryList = countries || [];
+
+const characters = [
+  { value: 'luna', label: 'Luna the Fox', competency: 'Self-Awareness' },
+  { value: 'benny', label: 'Benny the Bear', competency: 'Self-Regulation' },
+  { value: 'mia', label: 'Mia the Bunny', competency: 'Social Skills' },
+  { value: 'toby', label: 'Toby the Turtle', competency: 'Responsible Decisions' },
+  { value: 'zoe', label: 'Zoe the Bird', competency: 'Social Awareness' },
+];
+---
+
+<DashboardLayout title="Auto-Generate Story">
+  <div class="mb-6">
+    <a href="/dashboard/stories/new" class="text-sm text-[var(--color-v-teal)] hover:underline">
+      ← Manual mode
+    </a>
+  </div>
+
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+      Auto-Generate Story
+    </h1>
+    <p class="text-[var(--color-v-gray)] mt-1">
+      Write a plot and Claude generates everything — metadata, 7 beats, character description, and prompts.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- Left: Input Form -->
+    <div>
+      <div class="bg-white rounded-xl border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-6">Story Brief</h2>
+
+        <div class="space-y-5">
+          <!-- Plot -->
+          <div>
+            <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+              Plot <span class="text-red-500">*</span>
+            </label>
+            <textarea
+              id="plotInput"
+              rows="4"
+              placeholder="Ex: Hana, 7 ani din Japonia, e la festivalul florilor de cireș când plouă brusc. Se supără foarte tare. Benny o ajută să respire și să-și găsească calmul."
+              class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)] resize-none"
+            ></textarea>
+            <p class="text-xs text-[var(--color-v-gray)] mt-1">2-4 propoziții. Include: cine, unde, ce situație SEL, ce tool.</p>
+          </div>
+
+          <!-- Lead Character -->
+          <div>
+            <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+              Lead Character <span class="text-red-500">*</span>
+            </label>
+            <div class="grid grid-cols-1 gap-2">
+              {characters.map(c => (
+                <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-[var(--color-v-teal)] transition-colors has-[:checked]:border-[var(--color-v-teal)] has-[:checked]:bg-teal-50">
+                  <input type="radio" name="leadCharacter" value={c.value} class="accent-[var(--color-v-teal)]" />
+                  <div>
+                    <p class="text-sm font-medium text-[var(--color-v-dark)]">{c.label}</p>
+                    <p class="text-xs text-[var(--color-v-gray)]">{c.competency}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <!-- Country + Age Range -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+                Country <span class="text-red-500">*</span>
+              </label>
+              <select id="countrySelect" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]">
+                <option value="">Select country</option>
+                {countryList.map((c: any) => (
+                  <option value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+                Age Range <span class="text-red-500">*</span>
+              </label>
+              <select id="ageRangeSelect" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]">
+                <option value="4-6">4-6 years</option>
+                <option value="5-8" selected>5-8 years</option>
+                <option value="7-10">7-10 years</option>
+                <option value="9-12">9-12 years</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Optional child details -->
+          <details class="border border-gray-100 rounded-lg">
+            <summary class="px-4 py-3 text-sm font-medium text-[var(--color-v-gray)] cursor-pointer hover:text-[var(--color-v-dark)]">
+              Optional: specify child details
+            </summary>
+            <div class="px-4 pb-4 pt-2 grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-[var(--color-v-gray)] mb-1">Child Name</label>
+                <input type="text" id="childName" placeholder="Auto-generated" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-[var(--color-v-gray)] mb-1">Child Age</label>
+                <input type="number" id="childAge" min="4" max="12" placeholder="Auto" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
+              </div>
+            </div>
+          </details>
+
+          <button
+            id="generateBtn"
+            class="w-full py-3 bg-[var(--color-v-teal)] text-white rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            ✨ Generate Everything
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Review Panel -->
+    <div id="reviewPanel" class="hidden">
+      <!-- Progress -->
+      <div id="progressPanel" class="bg-white rounded-xl border border-gray-100 p-6 mb-4">
+        <h3 class="text-sm font-semibold text-[var(--color-v-dark)] mb-4">Generating...</h3>
+        <div class="space-y-3">
+          <div class="flex items-center gap-3" id="step1">
+            <div class="w-5 h-5 rounded-full border-2 border-gray-200 flex items-center justify-center text-xs" id="step1icon">1</div>
+            <span class="text-sm text-[var(--color-v-gray)]">Story metadata + 7 beats + character</span>
+          </div>
+          <div class="flex items-center gap-3" id="step2">
+            <div class="w-5 h-5 rounded-full border-2 border-gray-200 flex items-center justify-center text-xs" id="step2icon">2</div>
+            <span class="text-sm text-[var(--color-v-gray)]">Image + video prompts (parallel)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Generated content review -->
+      <div id="generatedContent" class="hidden space-y-4">
+
+        <!-- Video + Story summary -->
+        <div class="bg-white rounded-xl border border-gray-100 p-6">
+          <h3 class="text-sm font-semibold text-[var(--color-v-dark)] mb-4">Video & Story</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">Video Title</label>
+              <input type="text" id="rev_videoTitle" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">Story Title</label>
+              <input type="text" id="rev_storyTitle" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">SEL Tool</label>
+                <input type="text" id="rev_selTool" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">Key Phrase</label>
+                <input type="text" id="rev_keyPhrase" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Child -->
+        <div class="bg-white rounded-xl border border-gray-100 p-6">
+          <h3 class="text-sm font-semibold text-[var(--color-v-dark)] mb-4">Child Protagonist</h3>
+          <div class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">Name</label>
+                <input type="text" id="rev_childName" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">Age</label>
+                <input type="number" id="rev_childAge" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
+              </div>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">Visual Description</label>
+              <textarea id="rev_childVisual" rows="3" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- 7 Beats preview -->
+        <div class="bg-white rounded-xl border border-gray-100 p-6">
+          <h3 class="text-sm font-semibold text-[var(--color-v-dark)] mb-4">7 Beats <span class="text-xs font-normal text-[var(--color-v-gray)]">(editable after save)</span></h3>
+          <div id="beatsPreview" class="space-y-3"></div>
+        </div>
+
+        <!-- Prompts summary -->
+        <div class="bg-white rounded-xl border border-gray-100 p-6">
+          <h3 class="text-sm font-semibold text-[var(--color-v-dark)] mb-3">Generated Prompts</h3>
+          <div class="flex gap-4 text-sm">
+            <span id="imageCount" class="text-[var(--color-v-gray)]"></span>
+            <span id="videoCount" class="text-[var(--color-v-gray)]"></span>
+          </div>
+          <p class="text-xs text-[var(--color-v-gray)] mt-2">Viewable and copyable from the Script page after save.</p>
+        </div>
+
+        <!-- Save -->
+        <button
+          id="saveBtn"
+          class="w-full py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
+        >
+          Save Everything →
+        </button>
+
+        <p id="saveError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg p-3 text-center"></p>
+      </div>
+    </div>
+  </div>
+</DashboardLayout>
+
+<script>
+  let generatedData: any = null;
+
+  const BEAT_LABELS: Record<string, string> = {
+    hook: '1. Hook', context: '2. Context', the_moment: '3. The Moment',
+    the_reaction: '4. The Reaction', the_bridge: '5. The Bridge',
+    the_shift: '6. The Shift', the_glow: '7. The Glow',
+  };
+
+  function setStepState(step: number, state: 'active' | 'done' | 'idle') {
+    const icon = document.getElementById(`step${step}icon`);
+    if (!icon) return;
+    if (state === 'active') {
+      icon.className = 'w-5 h-5 rounded-full border-2 border-[var(--color-v-teal)] flex items-center justify-center text-xs';
+      icon.innerHTML = '<div class="w-3 h-3 border-2 border-[var(--color-v-teal)] border-t-transparent rounded-full animate-spin"></div>';
+    } else if (state === 'done') {
+      icon.className = 'w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-xs text-white font-bold';
+      icon.textContent = '✓';
+    } else {
+      icon.className = 'w-5 h-5 rounded-full border-2 border-gray-200 flex items-center justify-center text-xs';
+      icon.textContent = String(step);
+    }
+  }
+
+  document.getElementById('generateBtn')?.addEventListener('click', async () => {
+    const plot = (document.getElementById('plotInput') as HTMLTextAreaElement).value.trim();
+    const leadCharacter = (document.querySelector('input[name="leadCharacter"]:checked') as HTMLInputElement)?.value;
+    const countryId = (document.getElementById('countrySelect') as HTMLSelectElement).value;
+    const ageRange = (document.getElementById('ageRangeSelect') as HTMLSelectElement).value;
+    const childName = (document.getElementById('childName') as HTMLInputElement).value.trim() || undefined;
+    const childAgeVal = (document.getElementById('childAge') as HTMLInputElement).value;
+    const childAge = childAgeVal ? parseInt(childAgeVal) : undefined;
+
+    if (!plot) { alert('Please enter a plot.'); return; }
+    if (!leadCharacter) { alert('Please select a lead character.'); return; }
+    if (!countryId) { alert('Please select a country.'); return; }
+
+    const btn = document.getElementById('generateBtn') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+
+    const reviewPanel = document.getElementById('reviewPanel')!;
+    const progressPanel = document.getElementById('progressPanel')!;
+    const generatedContent = document.getElementById('generatedContent')!;
+
+    reviewPanel.classList.remove('hidden');
+    progressPanel.classList.remove('hidden');
+    generatedContent.classList.add('hidden');
+    setStepState(1, 'active');
+    setStepState(2, 'idle');
+
+    try {
+      const response = await fetch('/api/stories/auto-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plot, lead_character: leadCharacter, country_id: countryId, age_range: ageRange, child_name: childName, child_age: childAge }),
+      });
+
+      setStepState(1, 'done');
+      setStepState(2, 'active');
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Generation failed');
+
+      setStepState(2, 'done');
+      generatedData = data;
+
+      // Populate review fields
+      (document.getElementById('rev_videoTitle') as HTMLInputElement).value = data.video.title || '';
+      (document.getElementById('rev_storyTitle') as HTMLInputElement).value = data.story.title || '';
+      (document.getElementById('rev_selTool') as HTMLInputElement).value = data.story.sel_tool_modeled || '';
+      (document.getElementById('rev_keyPhrase') as HTMLInputElement).value = data.story.key_phrase || '';
+      (document.getElementById('rev_childName') as HTMLInputElement).value = data.video.child_name || '';
+      (document.getElementById('rev_childAge') as HTMLInputElement).value = data.video.child_age || '';
+      (document.getElementById('rev_childVisual') as HTMLTextAreaElement).value = data.video.child_visual_description || '';
+
+      // Beats preview
+      const beatsPreview = document.getElementById('beatsPreview')!;
+      beatsPreview.innerHTML = '';
+      data.beats.forEach((b: any) => {
+        const div = document.createElement('div');
+        div.className = 'border border-gray-100 rounded-lg p-3';
+        div.innerHTML = `<p class="text-xs font-bold text-[var(--color-v-gray)] mb-1">${BEAT_LABELS[b.beat] || b.beat}</p><p class="text-xs text-[var(--color-v-dark)] leading-relaxed">${b.content || '—'}</p>`;
+        beatsPreview.appendChild(div);
+      });
+
+      document.getElementById('imageCount')!.textContent = `📸 ${data.image_prompts?.length || 0} image prompts`;
+      document.getElementById('videoCount')!.textContent = `🎥 ${data.video_prompts?.length || 0} video prompts`;
+
+      progressPanel.classList.add('hidden');
+      generatedContent.classList.remove('hidden');
+    } catch (err) {
+      alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      progressPanel.classList.add('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '✨ Generate Everything';
+    }
+  });
+
+  document.getElementById('saveBtn')?.addEventListener('click', async () => {
+    if (!generatedData) return;
+
+    const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
+    const saveError = document.getElementById('saveError')!;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    saveError.classList.add('hidden');
+
+    // Apply any edits from review fields
+    generatedData.video.title = (document.getElementById('rev_videoTitle') as HTMLInputElement).value;
+    generatedData.story.title = (document.getElementById('rev_storyTitle') as HTMLInputElement).value;
+    generatedData.story.sel_tool_modeled = (document.getElementById('rev_selTool') as HTMLInputElement).value;
+    generatedData.story.key_phrase = (document.getElementById('rev_keyPhrase') as HTMLInputElement).value;
+    generatedData.video.child_name = (document.getElementById('rev_childName') as HTMLInputElement).value;
+    generatedData.video.child_age = parseInt((document.getElementById('rev_childAge') as HTMLInputElement).value) || null;
+    generatedData.video.child_visual_description = (document.getElementById('rev_childVisual') as HTMLTextAreaElement).value;
+
+    try {
+      const response = await fetch('/api/stories/auto-save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(generatedData),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Save failed');
+
+      window.location.href = `/dashboard/stories/${data.story_id}/script`;
+    } catch (err) {
+      saveError.textContent = 'Error: ' + (err instanceof Error ? err.message : 'Unknown error');
+      saveError.classList.remove('hidden');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Everything →';
+    }
+  });
+</script>

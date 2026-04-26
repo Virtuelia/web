@@ -40,6 +40,21 @@ if (videoId) {
     <p class="text-[var(--color-v-gray)] mt-1">Add a story to your video production</p>
   </div>
 
+  <!-- Mode selector -->
+  <div class="grid grid-cols-2 gap-4 max-w-3xl mb-8">
+    <a
+      href="/dashboard/stories/generate"
+      class="block p-5 bg-[var(--color-v-teal)] text-white rounded-xl hover:opacity-90 transition-opacity"
+    >
+      <p class="text-lg font-bold mb-1">✨ Auto</p>
+      <p class="text-sm opacity-90">Write a plot → Claude generates everything</p>
+    </a>
+    <div class="block p-5 bg-white border-2 border-[var(--color-v-teal)] rounded-xl">
+      <p class="text-lg font-bold text-[var(--color-v-dark)] mb-1">✏️ Manual</p>
+      <p class="text-sm text-[var(--color-v-gray)]">Fill in fields yourself — for custom stories</p>
+    </div>
+  </div>
+
   <!-- Form Card -->
   <div class="bg-white rounded-xl border border-gray-100 p-8 max-w-3xl">
     <form id="createStoryForm" class="space-y-6">
