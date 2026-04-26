@@ -1,0 +1,171 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { VIDEO_STATUS_LABELS, VIDEO_STATUS_COLORS, COMPETENCY_LABELS, formatDate } from '@/lib/helpers';
+import type { Video } from '@/lib/database.types';
+
+const supabase = Astro.locals.supabase;
+
+// Fetch all videos with stories count
+const { data: videos, error } = await supabase
+  .from('videos')
+  .select(`
+    id,
+    title,
+    content_type,
+    status,
+    child_name,
+    age_range,
+    primary_competency,
+    created_at,
+    stories(id)
+  `)
+  .order('created_at', { ascending: false });
+
+const videoList = (videos as any[])?.map(v => ({
+  ...v,
+  stories_count: v.stories?.length || 0,
+  stories: undefined,
+})) || [];
+---
+
+<DashboardLayout title="Videos">
+  <!-- Header -->
+  <div class="mb-8 flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+        Videos
+      </h1>
+      <p class="text-[var(--color-v-gray)] mt-1">Manage your video production pipeline</p>
+    </div>
+    <a
+      href="/dashboard/videos/new"
+      class="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-v-teal)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+    >
+      <span>+</span>
+      <span>New Video</span>
+    </a>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="mb-6 flex gap-4">
+    <select
+      id="statusFilter"
+      class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+    >
+      <option value="">All statuses</option>
+      <option value="concept">Concept</option>
+      <option value="planning">Planning</option>
+      <option value="scripting">Scripting</option>
+      <option value="sel_review">SEL Review</option>
+      <option value="storyboard">Storyboard</option>
+      <option value="production">Production</option>
+      <option value="editing">Editing</option>
+      <option value="final_review">Final Review</option>
+      <option value="published">Published</option>
+    </select>
+    <input
+      type="text"
+      id="searchInput"
+      placeholder="Search by title..."
+      class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+    />
+  </div>
+
+  {videoList.length === 0 ? (
+    <!-- Empty state -->
+    <div class="bg-white rounded-xl border border-gray-100 p-12 text-center">
+      <p class="text-[var(--color-v-gray)] mb-4">No videos yet. Start creating!</p>
+      <a
+        href="/dashboard/videos/new"
+        class="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-v-teal)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+      >
+        Create first video
+      </a>
+    </div>
+  ) : (
+    <!-- Card grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="videoGrid">
+      {videoList.map(video => (
+        <a
+          href={`/dashboard/videos/${video.id}`}
+          class="bg-white rounded-xl border border-gray-100 p-6 hover:shadow-lg transition-shadow group"
+          data-status={video.status}
+          data-title={video.title.toLowerCase()}
+        >
+          <!-- Title -->
+          <h3 class="text-lg font-semibold text-[var(--color-v-dark)] group-hover:text-[var(--color-v-teal)] transition-colors mb-3 line-clamp-2">
+            {video.title}
+          </h3>
+
+          <!-- Content type and status badges -->
+          <div class="flex gap-2 mb-4">
+            <span class="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-700">
+              {video.content_type.replace('_', ' ')}
+            </span>
+            <span class:list={['text-xs px-2 py-1 rounded-full font-medium', VIDEO_STATUS_COLORS[video.status] || 'bg-gray-100 text-gray-600']}>
+              {VIDEO_STATUS_LABELS[video.status]}
+            </span>
+          </div>
+
+          <!-- Child name if set -->
+          {video.child_name && (
+            <p class="text-sm text-[var(--color-v-gray)] mb-3">
+              <span class="font-medium">Protagonist:</span> {video.child_name}
+            </p>
+          )}
+
+          <!-- Metadata row -->
+          <div class="flex items-center gap-4 text-xs text-[var(--color-v-gray)] mb-4 pb-4 border-b border-gray-100">
+            <span>Age: {video.age_range}</span>
+            {video.primary_competency && (
+              <span class="text-[var(--color-v-teal)]">
+                {COMPETENCY_LABELS[video.primary_competency]}
+              </span>
+            )}
+          </div>
+
+          <!-- Story count and date -->
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-[var(--color-v-gray)]">
+              {video.stories_count} {video.stories_count === 1 ? 'story' : 'stories'}
+            </span>
+            <span class="text-xs text-[var(--color-v-gray)]">
+              {formatDate(video.created_at)}
+            </span>
+          </div>
+        </a>
+      ))}
+    </div>
+  )}
+</DashboardLayout>
+
+<script>
+  const statusFilter = document.getElementById('statusFilter');
+  const searchInput = document.getElementById('searchInput');
+  const videoGrid = document.getElementById('videoGrid');
+
+  if (statusFilter && searchInput && videoGrid) {
+    function filterVideos() {
+      const status = statusFilter.value.toLowerCase();
+      const search = searchInput.value.toLowerCase();
+
+      const cards = videoGrid.querySelectorAll('[data-status]');
+      cards.forEach(card => {
+        const cardStatus = card.getAttribute('data-status');
+        const cardTitle = card.getAttribute('data-title');
+
+        const statusMatch = !status || cardStatus === status;
+        const searchMatch = !search || cardTitle.includes(search);
+
+        if (statusMatch && searchMatch) {
+          (card as HTMLElement).style.display = '';
+        } else {
+          (card as HTMLElement).style.display = 'none';
+        }
+      });
+    }
+
+    statusFilter.addEventListener('change', filterVideos);
+    searchInput.addEventListener('input', filterVideos);
+  }
+</script>

@@ -1,0 +1,574 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { VIDEO_STATUS_LABELS, VIDEO_STATUS_COLORS, COMPETENCY_LABELS, formatDate } from '@/lib/helpers';
+import type { Video, Country } from '@/lib/database.types';
+
+const supabase = Astro.locals.supabase;
+const { id } = Astro.params;
+
+// Fetch video with country and stories
+const { data: video, error: videoError } = await supabase
+  .from('videos')
+  .select(`
+    *,
+    country(*)
+  `)
+  .eq('id', id)
+  .single();
+
+// Fetch countries for the form
+const { data: countries } = await supabase
+  .from('countries')
+  .select('id, name, code')
+  .order('name', { ascending: true });
+
+// Fetch stories for this video
+const { data: stories } = await supabase
+  .from('stories')
+  .select('*')
+  .eq('video_id', id)
+  .order('story_number', { ascending: true });
+
+if (!video) {
+  return new Response('Video not found', { status: 404 });
+}
+
+const videoData = video as Video;
+const countryList = (countries as Country[]) || [];
+const storyList = stories || [];
+
+// Get next status in workflow
+const statusWorkflow = ['concept', 'planning', 'scripting', 'sel_review', 'storyboard', 'production', 'editing', 'final_review', 'published'];
+const currentIndex = statusWorkflow.indexOf(videoData.status);
+const nextStatus = currentIndex < statusWorkflow.length - 1 ? statusWorkflow[currentIndex + 1] : null;
+---
+
+<DashboardLayout title={videoData.title}>
+  <!-- Back link -->
+  <div class="mb-6">
+    <a href="/dashboard/videos" class="text-sm text-[var(--color-v-teal)] hover:underline">
+      ← Back to Videos
+    </a>
+  </div>
+
+  <!-- Header with title and status -->
+  <div class="mb-8 flex items-start justify-between">
+    <div>
+      <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+        {videoData.title}
+      </h1>
+      <span class:list={['inline-block text-sm px-3 py-1 rounded-full font-medium mt-2', VIDEO_STATUS_COLORS[videoData.status] || 'bg-gray-100 text-gray-600']}>
+        {VIDEO_STATUS_LABELS[videoData.status]}
+      </span>
+    </div>
+    <div class="flex gap-2">
+      <button
+        id="editToggle"
+        class="px-4 py-2 border border-gray-200 text-[var(--color-v-dark)] rounded-lg font-medium hover:bg-gray-50 transition-colors"
+      >
+        Edit
+      </button>
+      {nextStatus && (
+        <button
+          id="advanceStatus"
+          data-next-status={nextStatus}
+          class="px-4 py-2 bg-[var(--color-v-teal)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+        >
+          Advance to {VIDEO_STATUS_LABELS[nextStatus as any]}
+        </button>
+      )}
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <!-- Left column - Main video info -->
+    <div class="lg:col-span-2">
+      <!-- Content Type, Age Range, Duration -->
+      <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Overview</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4" id="overviewSection">
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Content Type</p>
+            <p class="text-sm font-medium text-[var(--color-v-dark)]" data-field="content_type">
+              {videoData.content_type.replace('_', ' ')}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Age Range</p>
+            <p class="text-sm font-medium text-[var(--color-v-dark)]" data-field="age_range">
+              {videoData.age_range}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Duration</p>
+            <p class="text-sm font-medium text-[var(--color-v-dark)]" data-field="target_duration_minutes">
+              {videoData.target_duration_minutes ? `${videoData.target_duration_minutes} min` : '—'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Child Protagonist -->
+      <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Child Protagonist</h2>
+        <div class="space-y-4" id="childSection">
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Name</p>
+            <p class="text-sm text-[var(--color-v-dark)]" data-field="child_name">
+              {videoData.child_name || '—'}
+            </p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Age</p>
+              <p class="text-sm text-[var(--color-v-dark)]" data-field="child_age">
+                {videoData.child_age || '—'}
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Primary Competency</p>
+              <p class="text-sm text-[var(--color-v-dark)]" data-field="primary_competency">
+                {videoData.primary_competency ? COMPETENCY_LABELS[videoData.primary_competency] : '—'}
+              </p>
+            </div>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Personality</p>
+            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="child_personality">
+              {videoData.child_personality || '—'}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Visual Description</p>
+            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="child_visual_description">
+              {videoData.child_visual_description || '—'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEL and Theme -->
+      <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Social-Emotional Learning</h2>
+        <div class="space-y-4" id="selSection">
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Primary Competency</p>
+            <p class="text-sm text-[var(--color-v-dark)]" data-field="primary_competency">
+              {videoData.primary_competency ? COMPETENCY_LABELS[videoData.primary_competency] : '—'}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Theme</p>
+            <p class="text-sm text-[var(--color-v-dark)]" data-field="primary_theme">
+              {videoData.primary_theme || '—'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cultural Context -->
+      <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Cultural Context</h2>
+        <div class="space-y-4" id="culturalSection">
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Country / Region</p>
+            <p class="text-sm text-[var(--color-v-dark)]" data-field="country_id">
+              {videoData.country ? `${videoData.country.name} (${videoData.country.code})` : '—'}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Research Status</p>
+            <p class="text-sm text-[var(--color-v-dark)]" data-field="cultural_research_status">
+              {videoData.cultural_research_status || '—'}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Cultural Notes</p>
+            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="cultural_notes">
+              {videoData.cultural_notes || '—'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Narrator -->
+      <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Narrator</h2>
+        <div class="space-y-4" id="narratorSection">
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Opening</p>
+            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="narrator_opening">
+              {videoData.narrator_opening || '—'}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Closing</p>
+            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="narrator_closing">
+              {videoData.narrator_closing || '—'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {videoData.status === 'published' && (
+        <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+          <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">YouTube</h2>
+          <div class="space-y-4" id="youtubeSection">
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Video URL</p>
+              {videoData.youtube_url ? (
+                <a href={videoData.youtube_url} target="_blank" class="text-sm text-[var(--color-v-teal)] hover:underline">
+                  {videoData.youtube_url}
+                </a>
+              ) : (
+                <p class="text-sm text-[var(--color-v-dark)]">—</p>
+              )}
+            </div>
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Video ID</p>
+              <p class="text-sm text-[var(--color-v-dark)]" data-field="youtube_id">
+                {videoData.youtube_id || '—'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <!-- Team Notes -->
+      <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Team Notes</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="notesSection">
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-2">Alin</p>
+            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="notes_alin">
+              {videoData.notes_alin || '—'}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-2">David</p>
+            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="notes_david">
+              {videoData.notes_david || '—'}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-2">Emi</p>
+            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="notes_emi">
+              {videoData.notes_emi || '—'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column - Stories -->
+    <div class="lg:col-span-1">
+      <div class="bg-white rounded-xl border border-gray-100 p-6 sticky top-8">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-[var(--color-v-dark)]">Stories</h2>
+          <span class="text-2xl font-bold text-[var(--color-v-teal)]">{storyList.length}</span>
+        </div>
+
+        {storyList.length === 0 ? (
+          <div class="text-center py-6">
+            <p class="text-sm text-[var(--color-v-gray)] mb-4">No stories yet</p>
+            <a
+              href={`/dashboard/stories/new?video_id=${id}`}
+              class="inline-flex items-center gap-2 px-3 py-2 bg-[var(--color-v-teal)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <span>+</span> Add Story
+            </a>
+          </div>
+        ) : (
+          <div class="space-y-3 mb-4">
+            {storyList.map(story => (
+              <a
+                href={`/dashboard/stories/${story.id}`}
+                class="block p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors group"
+              >
+                <p class="text-sm font-medium text-[var(--color-v-dark)] group-hover:text-[var(--color-v-teal)] transition-colors">
+                  Story {story.story_number}
+                </p>
+                {story.title && <p class="text-xs text-[var(--color-v-gray)] mt-1">{story.title}</p>}
+              </a>
+            ))}
+          </div>
+        )}
+
+        <a
+          href={`/dashboard/stories/new?video_id=${id}`}
+          class="w-full px-4 py-2 border border-gray-200 text-[var(--color-v-dark)] rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+        >
+          Add Story
+        </a>
+      </div>
+
+      <!-- Delete section -->
+      <div class="bg-white rounded-xl border border-red-100 p-6 mt-6">
+        <h3 class="text-sm font-semibold text-red-800 mb-3">Danger Zone</h3>
+        <button
+          id="deleteBtn"
+          class="w-full px-4 py-2 bg-red-100 text-red-800 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors"
+        >
+          Delete Video
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal (hidden by default) -->
+  <div id="editModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <form id="editForm" class="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-8">
+      <h2 class="text-2xl font-bold text-[var(--color-v-dark)] mb-6">Edit Video</h2>
+
+      <!-- Edit form fields -->
+      <div class="mb-6">
+        <label for="edit_title" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Title</label>
+        <input type="text" id="edit_title" name="title" class="w-full px-4 py-2 border border-gray-200 rounded-lg" value={videoData.title} />
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div>
+          <label for="edit_contentType" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Content Type</label>
+          <select id="edit_contentType" name="contentType" class="w-full px-4 py-2 border border-gray-200 rounded-lg">
+            <option value="youtube_video" selected={videoData.content_type === 'youtube_video'}>YouTube Video</option>
+            <option value="youtube_short" selected={videoData.content_type === 'youtube_short'}>YouTube Short</option>
+            <option value="web_article" selected={videoData.content_type === 'web_article'}>Web Article</option>
+            <option value="web_lesson" selected={videoData.content_type === 'web_lesson'}>Web Lesson</option>
+            <option value="web_activity" selected={videoData.content_type === 'web_activity'}>Web Activity</option>
+            <option value="social_post" selected={videoData.content_type === 'social_post'}>Social Post</option>
+          </select>
+        </div>
+        <div>
+          <label for="edit_ageRange" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Age Range</label>
+          <select id="edit_ageRange" name="ageRange" class="w-full px-4 py-2 border border-gray-200 rounded-lg">
+            <option value="4-6" selected={videoData.age_range === '4-6'}>4-6 years</option>
+            <option value="5-8" selected={videoData.age_range === '5-8'}>5-8 years</option>
+            <option value="7-10" selected={videoData.age_range === '7-10'}>7-10 years</option>
+            <option value="9-12" selected={videoData.age_range === '9-12'}>9-12 years</option>
+            <option value="4-12" selected={videoData.age_range === '4-12'}>4-12 years</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div>
+          <label for="edit_childName" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Child Name</label>
+          <input type="text" id="edit_childName" name="childName" class="w-full px-4 py-2 border border-gray-200 rounded-lg" value={videoData.child_name || ''} />
+        </div>
+        <div>
+          <label for="edit_childAge" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Child Age</label>
+          <input type="number" id="edit_childAge" name="childAge" class="w-full px-4 py-2 border border-gray-200 rounded-lg" value={videoData.child_age || ''} />
+        </div>
+      </div>
+
+      <div class="mb-6">
+        <label for="edit_childPersonality" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Personality</label>
+        <textarea id="edit_childPersonality" name="childPersonality" rows="2" class="w-full px-4 py-2 border border-gray-200 rounded-lg">{videoData.child_personality || ''}</textarea>
+      </div>
+
+      <div class="mb-6">
+        <label for="edit_childVisual" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Visual Description</label>
+        <textarea id="edit_childVisual" name="childVisual" rows="2" class="w-full px-4 py-2 border border-gray-200 rounded-lg">{videoData.child_visual_description || ''}</textarea>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div>
+          <label for="edit_competency" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Primary Competency</label>
+          <select id="edit_competency" name="competency" class="w-full px-4 py-2 border border-gray-200 rounded-lg">
+            <option value="">Select competency</option>
+            <option value="self_awareness" selected={videoData.primary_competency === 'self_awareness'}>Self-Awareness</option>
+            <option value="self_regulation" selected={videoData.primary_competency === 'self_regulation'}>Self-Regulation</option>
+            <option value="social_skills" selected={videoData.primary_competency === 'social_skills'}>Social Skills</option>
+            <option value="responsible_decisions" selected={videoData.primary_competency === 'responsible_decisions'}>Responsible Decisions</option>
+            <option value="social_awareness" selected={videoData.primary_competency === 'social_awareness'}>Social Awareness</option>
+          </select>
+        </div>
+        <div>
+          <label for="edit_theme" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Theme</label>
+          <input type="text" id="edit_theme" name="theme" class="w-full px-4 py-2 border border-gray-200 rounded-lg" value={videoData.primary_theme || ''} />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div>
+          <label for="edit_duration" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Duration (min)</label>
+          <input type="number" id="edit_duration" name="duration" class="w-full px-4 py-2 border border-gray-200 rounded-lg" value={videoData.target_duration_minutes || ''} />
+        </div>
+        <div>
+          <label for="edit_storyCount" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Story Count</label>
+          <input type="number" id="edit_storyCount" name="storyCount" class="w-full px-4 py-2 border border-gray-200 rounded-lg" value={videoData.planned_story_count || ''} />
+        </div>
+      </div>
+
+      <div class="mb-6">
+        <label for="edit_country" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Country</label>
+        <select id="edit_country" name="country" class="w-full px-4 py-2 border border-gray-200 rounded-lg">
+          <option value="">Select country</option>
+          {countryList.map(c => (
+            <option value={c.id} selected={videoData.country_id === c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="mb-6">
+        <label for="edit_culturalNotes" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Cultural Notes</label>
+        <textarea id="edit_culturalNotes" name="culturalNotes" rows="2" class="w-full px-4 py-2 border border-gray-200 rounded-lg">{videoData.cultural_notes || ''}</textarea>
+      </div>
+
+      <div class="mb-6">
+        <label for="edit_narratorOpening" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Narrator Opening</label>
+        <textarea id="edit_narratorOpening" name="narratorOpening" rows="2" class="w-full px-4 py-2 border border-gray-200 rounded-lg">{videoData.narrator_opening || ''}</textarea>
+      </div>
+
+      <div class="mb-6">
+        <label for="edit_narratorClosing" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Narrator Closing</label>
+        <textarea id="edit_narratorClosing" name="narratorClosing" rows="2" class="w-full px-4 py-2 border border-gray-200 rounded-lg">{videoData.narrator_closing || ''}</textarea>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div>
+          <label for="edit_notesAlin" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Alin's Notes</label>
+          <textarea id="edit_notesAlin" name="notesAlin" rows="2" class="w-full px-4 py-2 border border-gray-200 rounded-lg">{videoData.notes_alin || ''}</textarea>
+        </div>
+        <div>
+          <label for="edit_notesDavid" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">David's Notes</label>
+          <textarea id="edit_notesDavid" name="notesDavid" rows="2" class="w-full px-4 py-2 border border-gray-200 rounded-lg">{videoData.notes_david || ''}</textarea>
+        </div>
+        <div>
+          <label for="edit_notesEmi" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Emi's Notes</label>
+          <textarea id="edit_notesEmi" name="notesEmi" rows="2" class="w-full px-4 py-2 border border-gray-200 rounded-lg">{videoData.notes_emi || ''}</textarea>
+        </div>
+      </div>
+
+      <div class="flex gap-4">
+        <button type="submit" class="px-6 py-2 bg-[var(--color-v-teal)] text-white rounded-lg font-medium hover:opacity-90">
+          Save Changes
+        </button>
+        <button type="button" id="closeEditModal" class="px-6 py-2 border border-gray-200 text-[var(--color-v-dark)] rounded-lg font-medium hover:bg-gray-50">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+</DashboardLayout>
+
+<script>
+  const editToggle = document.getElementById('editToggle') as HTMLButtonElement;
+  const editModal = document.getElementById('editModal') as HTMLDivElement;
+  const closeEditModal = document.getElementById('closeEditModal') as HTMLButtonElement;
+  const editForm = document.getElementById('editForm') as HTMLFormElement;
+  const advanceStatus = document.getElementById('advanceStatus') as HTMLButtonElement | null;
+  const deleteBtn = document.getElementById('deleteBtn') as HTMLButtonElement;
+  const videoId = window.location.pathname.split('/').pop();
+
+  // Edit toggle
+  editToggle.addEventListener('click', () => {
+    editModal.classList.toggle('hidden');
+  });
+
+  closeEditModal.addEventListener('click', () => {
+    editModal.classList.add('hidden');
+  });
+
+  // Click outside modal to close
+  editModal.addEventListener('click', (e) => {
+    if (e.target === editModal) {
+      editModal.classList.add('hidden');
+    }
+  });
+
+  // Edit form submit
+  editForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const updates = {
+      title: (document.getElementById('edit_title') as HTMLInputElement).value,
+      content_type: (document.getElementById('edit_contentType') as HTMLSelectElement).value,
+      age_range: (document.getElementById('edit_ageRange') as HTMLSelectElement).value,
+      child_name: (document.getElementById('edit_childName') as HTMLInputElement).value || null,
+      child_age: (document.getElementById('edit_childAge') as HTMLInputElement).value ? parseInt((document.getElementById('edit_childAge') as HTMLInputElement).value) : null,
+      child_personality: (document.getElementById('edit_childPersonality') as HTMLTextAreaElement).value || null,
+      child_visual_description: (document.getElementById('edit_childVisual') as HTMLTextAreaElement).value || null,
+      primary_competency: (document.getElementById('edit_competency') as HTMLSelectElement).value || null,
+      primary_theme: (document.getElementById('edit_theme') as HTMLInputElement).value || null,
+      target_duration_minutes: (document.getElementById('edit_duration') as HTMLInputElement).value ? parseInt((document.getElementById('edit_duration') as HTMLInputElement).value) : null,
+      planned_story_count: (document.getElementById('edit_storyCount') as HTMLInputElement).value ? parseInt((document.getElementById('edit_storyCount') as HTMLInputElement).value) : 0,
+      country_id: (document.getElementById('edit_country') as HTMLSelectElement).value || null,
+      cultural_notes: (document.getElementById('edit_culturalNotes') as HTMLTextAreaElement).value || null,
+      narrator_opening: (document.getElementById('edit_narratorOpening') as HTMLTextAreaElement).value || null,
+      narrator_closing: (document.getElementById('edit_narratorClosing') as HTMLTextAreaElement).value || null,
+      notes_alin: (document.getElementById('edit_notesAlin') as HTMLTextAreaElement).value || null,
+      notes_david: (document.getElementById('edit_notesDavid') as HTMLTextAreaElement).value || null,
+      notes_emi: (document.getElementById('edit_notesEmi') as HTMLTextAreaElement).value || null,
+    };
+
+    try {
+      const response = await fetch(`/api/videos/${videoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert('Error saving: ' + (error.error || 'Unknown error'));
+        return;
+      }
+
+      alert('Changes saved! Reloading...');
+      window.location.reload();
+    } catch (error) {
+      alert('Error saving: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  });
+
+  // Advance status
+  if (advanceStatus) {
+    advanceStatus.addEventListener('click', async () => {
+      const nextStatus = advanceStatus.getAttribute('data-next-status');
+      try {
+        const response = await fetch(`/api/videos/${videoId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: nextStatus }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          alert('Error: ' + (error.error || 'Unknown error'));
+          return;
+        }
+
+        alert('Status updated! Reloading...');
+        window.location.reload();
+      } catch (error) {
+        alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      }
+    });
+  }
+
+  // Delete video
+  deleteBtn.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to delete this video? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/videos/${videoId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert('Error deleting: ' + (error.error || 'Unknown error'));
+        return;
+      }
+
+      alert('Video deleted!');
+      window.location.href = '/dashboard/videos';
+    } catch (error) {
+      alert('Error deleting: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  });
+</script>

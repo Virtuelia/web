@@ -1,0 +1,197 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { STORY_STATUS_LABELS, STORY_STATUS_COLORS, COMPETENCY_LABELS, CHARACTER_LABELS, formatDate } from '@/lib/helpers';
+import type { Story } from '@/lib/database.types';
+
+const supabase = Astro.locals.supabase;
+
+// Fetch all stories with video join
+const { data: stories, error } = await supabase
+  .from('stories')
+  .select(`
+    id,
+    story_number,
+    title,
+    video_id,
+    lead_character,
+    primary_competency,
+    status,
+    sel_approved,
+    duration_minutes,
+    created_at,
+    videos (title)
+  `)
+  .order('created_at', { ascending: false });
+
+const storyList = (stories as any[])?.map(s => ({
+  ...s,
+  video_title: s.videos?.title || 'Unknown Video',
+  videos: undefined,
+})) || [];
+---
+
+<DashboardLayout title="Stories">
+  <!-- Header -->
+  <div class="mb-8 flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+        Stories
+      </h1>
+      <p class="text-[var(--color-v-gray)] mt-1">{storyList.length} stories total</p>
+    </div>
+    <a
+      href="/dashboard/stories/new"
+      class="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-v-teal)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+    >
+      <span>+</span>
+      <span>New Story</span>
+    </a>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="mb-6 flex gap-4 flex-wrap">
+    <select
+      id="statusFilter"
+      class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+    >
+      <option value="">All statuses</option>
+      <option value="draft">Draft</option>
+      <option value="script_ready">Script Ready</option>
+      <option value="sel_pending">SEL Pending</option>
+      <option value="sel_approved">SEL Approved</option>
+      <option value="sel_revision">SEL Revision</option>
+      <option value="storyboard">Storyboard</option>
+      <option value="animation">Animation</option>
+      <option value="voiceover">Voiceover</option>
+      <option value="complete">Complete</option>
+    </select>
+    <select
+      id="competencyFilter"
+      class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+    >
+      <option value="">All competencies</option>
+      <option value="self_awareness">Self-Awareness</option>
+      <option value="self_regulation">Self-Regulation</option>
+      <option value="social_skills">Social Skills</option>
+      <option value="responsible_decisions">Responsible Decisions</option>
+      <option value="social_awareness">Social Awareness</option>
+    </select>
+    <input
+      type="text"
+      id="searchInput"
+      placeholder="Search by title..."
+      class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)] min-w-[200px]"
+    />
+  </div>
+
+  {storyList.length === 0 ? (
+    <!-- Empty state -->
+    <div class="bg-white rounded-xl border border-gray-100 p-12 text-center">
+      <p class="text-[var(--color-v-gray)] mb-4">No stories yet. Create your first story!</p>
+      <a
+        href="/dashboard/stories/new"
+        class="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-v-teal)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+      >
+        Create first story
+      </a>
+    </div>
+  ) : (
+    <!-- Table -->
+    <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <table class="w-full">
+        <thead class="bg-gray-50 border-b border-gray-100">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-[var(--color-v-dark)] uppercase tracking-wider">Story</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-[var(--color-v-dark)] uppercase tracking-wider">Video</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-[var(--color-v-dark)] uppercase tracking-wider">Character</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-[var(--color-v-dark)] uppercase tracking-wider">Competency</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-[var(--color-v-dark)] uppercase tracking-wider">Status</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-[var(--color-v-dark)] uppercase tracking-wider">SEL</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-[var(--color-v-dark)] uppercase tracking-wider">Duration</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-[var(--color-v-dark)] uppercase tracking-wider">Created</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100" id="storyTableBody">
+          {storyList.map(story => (
+            <tr
+              class="hover:bg-gray-50 transition-colors cursor-pointer group"
+              data-status={story.status}
+              data-competency={story.primary_competency}
+              data-title={story.title?.toLowerCase() || `story ${story.story_number}`.toLowerCase()}
+              onClick={() => window.location.href = `/dashboard/stories/${story.id}`}
+            >
+              <td class="px-6 py-4 text-sm font-medium text-[var(--color-v-teal)] group-hover:underline">
+                {story.story_number}. {story.title || `Story ${story.story_number}`}
+              </td>
+              <td class="px-6 py-4 text-sm text-[var(--color-v-dark)]">
+                {story.video_title}
+              </td>
+              <td class="px-6 py-4 text-sm text-[var(--color-v-dark)]">
+                {CHARACTER_LABELS[story.lead_character]}
+              </td>
+              <td class="px-6 py-4 text-sm">
+                <span class="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  {COMPETENCY_LABELS[story.primary_competency]}
+                </span>
+              </td>
+              <td class="px-6 py-4 text-sm">
+                <span class:list={['px-2 py-1 rounded-full text-xs font-medium inline-block', STORY_STATUS_COLORS[story.status] || 'bg-gray-100 text-gray-600']}>
+                  {STORY_STATUS_LABELS[story.status]}
+                </span>
+              </td>
+              <td class="px-6 py-4 text-sm text-center">
+                {story.sel_approved ? (
+                  <span class="text-green-600 font-bold text-lg">✓</span>
+                ) : (
+                  <span class="text-red-400 font-bold text-lg">✕</span>
+                )}
+              </td>
+              <td class="px-6 py-4 text-sm text-[var(--color-v-gray)]">
+                {story.duration_minutes} min
+              </td>
+              <td class="px-6 py-4 text-sm text-[var(--color-v-gray)]">
+                {formatDate(story.created_at)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+</DashboardLayout>
+
+<script>
+  const statusFilter = document.getElementById('statusFilter');
+  const competencyFilter = document.getElementById('competencyFilter');
+  const searchInput = document.getElementById('searchInput');
+  const tableBody = document.getElementById('storyTableBody');
+
+  if (statusFilter && competencyFilter && searchInput && tableBody) {
+    function filterStories() {
+      const status = statusFilter.value.toLowerCase();
+      const competency = competencyFilter.value.toLowerCase();
+      const search = searchInput.value.toLowerCase();
+
+      const rows = tableBody.querySelectorAll('tr');
+      rows.forEach(row => {
+        const rowStatus = row.getAttribute('data-status');
+        const rowCompetency = row.getAttribute('data-competency');
+        const rowTitle = row.getAttribute('data-title');
+
+        const statusMatch = !status || rowStatus === status;
+        const competencyMatch = !competency || rowCompetency === competency;
+        const searchMatch = !search || rowTitle.includes(search);
+
+        if (statusMatch && competencyMatch && searchMatch) {
+          (row as HTMLElement).style.display = '';
+        } else {
+          (row as HTMLElement).style.display = 'none';
+        }
+      });
+    }
+
+    statusFilter.addEventListener('change', filterStories);
+    competencyFilter.addEventListener('change', filterStories);
+    searchInput.addEventListener('input', filterStories);
+  }
+</script>

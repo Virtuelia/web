@@ -1,0 +1,631 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { STORY_STATUS_LABELS, STORY_STATUS_COLORS, CHARACTER_LABELS, COMPETENCY_LABELS, BEAT_LABELS, BEAT_COLORS, BEAT_DESCRIPTIONS, formatDate } from '@/lib/helpers';
+import type { Story, StoryBeat, BeatType } from '@/lib/database.types';
+
+const supabase = Astro.locals.supabase;
+const { id } = Astro.params;
+
+// Fetch story with beats
+const { data: story, error: storyError } = await supabase
+  .from('stories')
+  .select(`
+    *,
+    beats: story_beats(*),
+    character_moments(*),
+    trait: primary_trait_id(*),
+    videos (id, title)
+  `)
+  .eq('id', id)
+  .single();
+
+if (!story) {
+  return new Response('Story not found', { status: 404 });
+}
+
+const storyData = story as any;
+const beatTypes: BeatType[] = ['hook', 'context', 'the_moment', 'the_reaction', 'the_bridge', 'the_shift', 'the_glow'];
+const existingBeats = (storyData.beats || []) as StoryBeat[];
+
+// Create beat objects (including empty ones if they don't exist)
+const beats = beatTypes.map((beatType, index) => {
+  const existing = existingBeats.find(b => b.beat === beatType);
+  return {
+    beat: beatType,
+    content: existing?.content || '',
+    emotion_energy: existing?.emotion_energy || '',
+    narrator_line: existing?.narrator_line || '',
+    visual_notes: existing?.visual_notes || '',
+    duration_seconds: existing?.duration_seconds || 0,
+  };
+});
+
+const videoId = storyData.videos?.id;
+const videoTitle = storyData.videos?.title;
+const characterLabel = CHARACTER_LABELS[storyData.lead_character];
+const competencyLabel = COMPETENCY_LABELS[storyData.primary_competency];
+
+// Count SEL checks
+const selChecks = [
+  storyData.sel_emotion_accurate,
+  storyData.sel_tool_evidence_based,
+  storyData.sel_resolution_realistic,
+  storyData.sel_content_safe,
+  storyData.sel_message_clear,
+  storyData.sel_cultural_check,
+].filter(Boolean).length;
+---
+
+<DashboardLayout title={storyData.title || `Story ${storyData.story_number}`}>
+  <!-- Back link to video -->
+  {videoId && (
+    <div class="mb-6">
+      <a href={`/dashboard/videos/${videoId}`} class="text-sm text-[var(--color-v-teal)] hover:underline">
+        ← Back to {videoTitle}
+      </a>
+    </div>
+  )}
+
+  <!-- Header -->
+  <div class="mb-8 flex items-start justify-between">
+    <div>
+      <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+        {storyData.story_number}. {storyData.title || `Story ${storyData.story_number}`}
+      </h1>
+      <div class="flex gap-2 mt-3 flex-wrap">
+        <span class:list={['inline-block text-sm px-3 py-1 rounded-full font-medium', STORY_STATUS_COLORS[storyData.status] || 'bg-gray-100 text-gray-600']}>
+          {STORY_STATUS_LABELS[storyData.status]}
+        </span>
+        <span class="inline-block text-sm px-3 py-1 rounded-full font-medium bg-indigo-100 text-indigo-800">
+          {characterLabel}
+        </span>
+        <span class="inline-block text-sm px-3 py-1 rounded-full font-medium bg-violet-100 text-violet-800">
+          {competencyLabel}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main grid: beats on left, validation on right -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <!-- Left/Center: 7-Beat Editor (spans 2 columns) -->
+    <div class="lg:col-span-2">
+      <!-- Story Meta Section -->
+      <div class="bg-white rounded-xl border border-gray-100 p-6 mb-8">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Story Details</h2>
+        <div class="space-y-4" id="metaSection">
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Title</p>
+            <p class="text-sm text-[var(--color-v-dark)] font-medium" data-field="title">
+              {storyData.title || '—'}
+            </p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Lead Character</p>
+              <p class="text-sm text-[var(--color-v-dark)]" data-field="lead_character">
+                {characterLabel}
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Primary Competency</p>
+              <p class="text-sm text-[var(--color-v-dark)]" data-field="primary_competency">
+                {competencyLabel}
+              </p>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">SEL Tool Modeled</p>
+              <p class="text-sm text-[var(--color-v-dark)]" data-field="sel_tool_modeled">
+                {storyData.sel_tool_modeled || '—'}
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Key Phrase</p>
+              <p class="text-sm text-[var(--color-v-dark)]" data-field="key_phrase">
+                {storyData.key_phrase || '—'}
+              </p>
+            </div>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Situation Description</p>
+            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="situation_description">
+              {storyData.situation_description || '—'}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Duration</p>
+            <p class="text-sm text-[var(--color-v-dark)]" data-field="duration_minutes">
+              {storyData.duration_minutes} minutes
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7-Beat Timeline -->
+      <div class="mb-8">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Story Structure - 7 Beats</h2>
+
+        <div class="space-y-4" id="beatsContainer">
+          {beats.map((beat, idx) => {
+            const colors = BEAT_COLORS[beat.beat as BeatType];
+            const label = BEAT_LABELS[beat.beat as BeatType];
+            const description = BEAT_DESCRIPTIONS[beat.beat as BeatType];
+
+            return (
+              <div class={`rounded-xl border-l-4 p-6 transition-all ${colors}`} data-beat={beat.beat}>
+                <!-- Beat header -->
+                <div class="flex items-start justify-between mb-4 cursor-pointer beat-toggle" onClick="this.closest('[data-beat]').classList.toggle('beat-collapsed')">
+                  <div class="flex-1">
+                    <h3 class="text-lg font-semibold text-[var(--color-v-dark)]">{label}</h3>
+                    <p class="text-xs text-[var(--color-v-gray)] italic mt-1">{description}</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="text-[var(--color-v-gray)] hover:text-[var(--color-v-dark)] transition-colors beat-toggle-btn"
+                    onClick="event.stopPropagation()"
+                  >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Beat content (collapsible) -->
+                <div class="beat-content space-y-4">
+                  <!-- Content -->
+                  <div>
+                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+                      Story Content
+                    </label>
+                    <textarea
+                      class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+                      rows="4"
+                      data-field="content"
+                      data-beat={beat.beat}
+                    >{beat.content}</textarea>
+                  </div>
+
+                  <!-- Emotion/Energy -->
+                  <div>
+                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+                      Emotion & Energy Level
+                    </label>
+                    <input
+                      type="text"
+                      class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+                      placeholder="e.g., Anxious/medium, Happy/high"
+                      data-field="emotion_energy"
+                      data-beat={beat.beat}
+                      value={beat.emotion_energy}
+                    />
+                  </div>
+
+                  <!-- Narrator Line -->
+                  <div>
+                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+                      Narrator Line
+                    </label>
+                    <textarea
+                      class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+                      rows="2"
+                      placeholder="What does the narrator say?"
+                      data-field="narrator_line"
+                      data-beat={beat.beat}
+                    >{beat.narrator_line}</textarea>
+                  </div>
+
+                  <!-- Visual Notes -->
+                  <div>
+                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+                      Visual Notes (for David)
+                    </label>
+                    <textarea
+                      class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+                      rows="2"
+                      placeholder="Animation, storyboard, visual style notes..."
+                      data-field="visual_notes"
+                      data-beat={beat.beat}
+                    >{beat.visual_notes}</textarea>
+                  </div>
+
+                  <!-- Duration -->
+                  <div>
+                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+                      Duration (seconds)
+                    </label>
+                    <input
+                      type="number"
+                      class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+                      min="0"
+                      placeholder="0"
+                      data-field="duration_seconds"
+                      data-beat={beat.beat}
+                      value={beat.duration_seconds}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <!-- Save Beats Button -->
+        <button
+          id="saveBeatsBtn"
+          class="mt-8 w-full px-6 py-3 bg-[var(--color-v-teal)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+        >
+          Save All Beats
+        </button>
+      </div>
+    </div>
+
+    <!-- Right: SEL Validation & Media Panels -->
+    <div class="lg:col-span-1">
+      <!-- SEL Validation Panel -->
+      <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6 sticky top-8">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">SEL Validation</h2>
+
+        <!-- Progress -->
+        <div class="mb-6 pb-6 border-b border-gray-100">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-sm text-[var(--color-v-gray)]">Checks Complete</p>
+            <p class="text-2xl font-bold text-[var(--color-v-teal)]">{selChecks}/6</p>
+          </div>
+          <div class="w-full bg-gray-100 rounded-full h-2">
+            <div class="bg-[var(--color-v-teal)] h-2 rounded-full transition-all" style={`width: ${(selChecks / 6) * 100}%`}></div>
+          </div>
+        </div>
+
+        <!-- Checkboxes -->
+        <div class="space-y-3 mb-6">
+          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
+            <input
+              type="checkbox"
+              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
+              id="check_emotion"
+              checked={storyData.sel_emotion_accurate}
+            />
+            <span class="text-sm text-[var(--color-v-dark)]">Emotion Accurate?</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
+            <input
+              type="checkbox"
+              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
+              id="check_tool"
+              checked={storyData.sel_tool_evidence_based}
+            />
+            <span class="text-sm text-[var(--color-v-dark)]">Tool Evidence-Based?</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
+            <input
+              type="checkbox"
+              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
+              id="check_resolution"
+              checked={storyData.sel_resolution_realistic}
+            />
+            <span class="text-sm text-[var(--color-v-dark)]">Resolution Realistic?</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
+            <input
+              type="checkbox"
+              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
+              id="check_safe"
+              checked={storyData.sel_content_safe}
+            />
+            <span class="text-sm text-[var(--color-v-dark)]">Content Safe?</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
+            <input
+              type="checkbox"
+              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
+              id="check_message"
+              checked={storyData.sel_message_clear}
+            />
+            <span class="text-sm text-[var(--color-v-dark)]">Message Clear?</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
+            <input
+              type="checkbox"
+              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
+              id="check_cultural"
+              checked={storyData.sel_cultural_check}
+            />
+            <span class="text-sm text-[var(--color-v-dark)]">Cultural Check?</span>
+          </label>
+        </div>
+
+        <!-- Review Notes -->
+        <div class="mb-6 pb-6 border-b border-gray-100">
+          <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Review Notes</label>
+          <textarea
+            id="reviewNotes"
+            rows="3"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            placeholder="SEL reviewer notes..."
+          >{storyData.sel_review_notes || ''}</textarea>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="space-y-2">
+          <button
+            id="approveSELBtn"
+            class="w-full px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+          >
+            Approve SEL
+          </button>
+          <button
+            id="requestRevisionBtn"
+            class="w-full px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors"
+          >
+            Request Revision
+          </button>
+        </div>
+      </div>
+
+      <!-- Media Production Panel -->
+      <div class="bg-white rounded-xl border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Media Production</h2>
+
+        <div class="space-y-4">
+          <!-- Storyboard URL -->
+          <div>
+            <label for="storyboardUrl" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+              Storyboard URL
+            </label>
+            <input
+              type="url"
+              id="storyboardUrl"
+              placeholder="https://..."
+              class="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+              value={storyData.storyboard_url || ''}
+            />
+          </div>
+
+          <!-- Animation Status -->
+          <div>
+            <label for="animationStatus" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+              Animation Status
+            </label>
+            <select
+              id="animationStatus"
+              class="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            >
+              <option value="">Not started</option>
+              <option value="in_progress" selected={storyData.animation_status === 'in_progress'}>In Progress</option>
+              <option value="complete" selected={storyData.animation_status === 'complete'}>Complete</option>
+            </select>
+          </div>
+
+          <!-- Voiceover Status -->
+          <div>
+            <label for="voiceoverStatus" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+              Voiceover Status
+            </label>
+            <select
+              id="voiceoverStatus"
+              class="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            >
+              <option value="">Not started</option>
+              <option value="in_progress" selected={storyData.voiceover_status === 'in_progress'}>In Progress</option>
+              <option value="complete" selected={storyData.voiceover_status === 'complete'}>Complete</option>
+            </select>
+          </div>
+
+          <!-- Media Notes -->
+          <div>
+            <label for="mediaNotes" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+              Media Notes (for David)
+            </label>
+            <textarea
+              id="mediaNotes"
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+              placeholder="Production notes..."
+            >{storyData.media_notes || ''}</textarea>
+          </div>
+
+          <!-- Save Media Button -->
+          <button
+            id="saveMediaBtn"
+            class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            Save Media Info
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</DashboardLayout>
+
+<script>
+  const storyId = window.location.pathname.split('/').pop();
+
+  // Toggle beat sections
+  document.querySelectorAll('.beat-toggle').forEach(el => {
+    el.addEventListener('click', function() {
+      (this as HTMLElement).closest('[data-beat]')?.classList.toggle('beat-collapsed');
+    });
+  });
+
+  // Style collapsed beats
+  const style = document.createElement('style');
+  style.textContent = `
+    [data-beat].beat-collapsed .beat-content {
+      display: none;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Save beats
+  const saveBeatsBtn = document.getElementById('saveBeatsBtn');
+  if (saveBeatsBtn) {
+    saveBeatsBtn.addEventListener('click', async () => {
+      const beats = [];
+      document.querySelectorAll('[data-beat]').forEach(beatEl => {
+        const beatType = beatEl.getAttribute('data-beat');
+        const content = (beatEl.querySelector('[data-field="content"]') as HTMLTextAreaElement)?.value || '';
+        const emotion_energy = (beatEl.querySelector('[data-field="emotion_energy"]') as HTMLInputElement)?.value || '';
+        const narrator_line = (beatEl.querySelector('[data-field="narrator_line"]') as HTMLTextAreaElement)?.value || '';
+        const visual_notes = (beatEl.querySelector('[data-field="visual_notes"]') as HTMLTextAreaElement)?.value || '';
+        const duration_seconds = parseInt((beatEl.querySelector('[data-field="duration_seconds"]') as HTMLInputElement)?.value || '0');
+
+        beats.push({
+          beat: beatType,
+          content: content || null,
+          emotion_energy: emotion_energy || null,
+          narrator_line: narrator_line || null,
+          visual_notes: visual_notes || null,
+          duration_seconds: duration_seconds || null,
+        });
+      });
+
+      try {
+        const response = await fetch(`/api/stories/${storyId}/beats`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(beats),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          alert('Error saving beats: ' + (error.error || 'Unknown error'));
+          return;
+        }
+
+        alert('Beats saved successfully!');
+      } catch (error) {
+        alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      }
+    });
+  }
+
+  // SEL Validation
+  const updateProgress = () => {
+    const checks = [
+      (document.getElementById('check_emotion') as HTMLInputElement).checked,
+      (document.getElementById('check_tool') as HTMLInputElement).checked,
+      (document.getElementById('check_resolution') as HTMLInputElement).checked,
+      (document.getElementById('check_safe') as HTMLInputElement).checked,
+      (document.getElementById('check_message') as HTMLInputElement).checked,
+      (document.getElementById('check_cultural') as HTMLInputElement).checked,
+    ];
+    const count = checks.filter(Boolean).length;
+    const progressBar = document.querySelector('.bg-\\[var\\(--color-v-teal\\)\\]');
+    if (progressBar) {
+      (progressBar as HTMLElement).style.width = `${(count / 6) * 100}%`;
+    }
+  };
+
+  document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', updateProgress);
+  });
+
+  // Approve SEL
+  const approveSELBtn = document.getElementById('approveSELBtn');
+  if (approveSELBtn) {
+    approveSELBtn.addEventListener('click', async () => {
+      const checks = {
+        sel_emotion_accurate: (document.getElementById('check_emotion') as HTMLInputElement).checked,
+        sel_tool_evidence_based: (document.getElementById('check_tool') as HTMLInputElement).checked,
+        sel_resolution_realistic: (document.getElementById('check_resolution') as HTMLInputElement).checked,
+        sel_content_safe: (document.getElementById('check_safe') as HTMLInputElement).checked,
+        sel_message_clear: (document.getElementById('check_message') as HTMLInputElement).checked,
+        sel_cultural_check: (document.getElementById('check_cultural') as HTMLInputElement).checked,
+        sel_review_notes: (document.getElementById('reviewNotes') as HTMLTextAreaElement).value || null,
+        sel_approved: true,
+        status: 'sel_approved',
+        sel_reviewed_at: new Date().toISOString(),
+      };
+
+      try {
+        const response = await fetch(`/api/stories/${storyId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(checks),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          alert('Error: ' + (error.error || 'Unknown error'));
+          return;
+        }
+
+        alert('Story approved! Reloading...');
+        window.location.reload();
+      } catch (error) {
+        alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      }
+    });
+  }
+
+  // Request Revision
+  const requestRevisionBtn = document.getElementById('requestRevisionBtn');
+  if (requestRevisionBtn) {
+    requestRevisionBtn.addEventListener('click', async () => {
+      const reviewNotes = (document.getElementById('reviewNotes') as HTMLTextAreaElement).value;
+
+      if (!reviewNotes.trim()) {
+        alert('Please add revision notes before requesting changes.');
+        return;
+      }
+
+      const body = {
+        status: 'sel_revision',
+        sel_review_notes: reviewNotes,
+        sel_reviewed_at: new Date().toISOString(),
+      };
+
+      try {
+        const response = await fetch(`/api/stories/${storyId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          alert('Error: ' + (error.error || 'Unknown error'));
+          return;
+        }
+
+        alert('Revision requested! Reloading...');
+        window.location.reload();
+      } catch (error) {
+        alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      }
+    });
+  }
+
+  // Save Media
+  const saveMediaBtn = document.getElementById('saveMediaBtn');
+  if (saveMediaBtn) {
+    saveMediaBtn.addEventListener('click', async () => {
+      const body = {
+        storyboard_url: (document.getElementById('storyboardUrl') as HTMLInputElement).value || null,
+        animation_status: (document.getElementById('animationStatus') as HTMLSelectElement).value || null,
+        voiceover_status: (document.getElementById('voiceoverStatus') as HTMLSelectElement).value || null,
+        media_notes: (document.getElementById('mediaNotes') as HTMLTextAreaElement).value || null,
+      };
+
+      try {
+        const response = await fetch(`/api/stories/${storyId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          alert('Error: ' + (error.error || 'Unknown error'));
+          return;
+        }
+
+        alert('Media information saved!');
+      } catch (error) {
+        alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      }
+    });
+  }
+</script>

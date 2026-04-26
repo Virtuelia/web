@@ -1,0 +1,100 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+
+const supabase = Astro.locals.supabase;
+
+// Fetch overview data
+const [videosRes, storiesRes, traitsRes, countriesRes] = await Promise.all([
+  supabase.from('videos').select('id, title, status, primary_competency, child_name, updated_at').order('updated_at', { ascending: false }).limit(10),
+  supabase.from('stories').select('id, title, status, sel_approved, lead_character, video_id').order('updated_at', { ascending: false }),
+  supabase.from('sel_traits').select('id, competency'),
+  supabase.from('countries').select('id'),
+]);
+
+const videos = videosRes.data || [];
+const stories = storiesRes.data || [];
+const traitCount = traitsRes.data?.length || 0;
+const countryCount = countriesRes.data?.length || 0;
+
+// Stats
+const videosByStatus: Record<string, number> = {};
+videos.forEach(v => { videosByStatus[v.status] = (videosByStatus[v.status] || 0) + 1; });
+
+const selPending = stories.filter(s => s.status === 'sel_pending').length;
+const selApproved = stories.filter(s => s.sel_approved).length;
+const storiesComplete = stories.filter(s => s.status === 'complete').length;
+
+const statusColors: Record<string, string> = {
+  concept: 'bg-purple-100 text-purple-800',
+  planning: 'bg-sky-100 text-sky-800',
+  scripting: 'bg-blue-100 text-blue-800',
+  sel_review: 'bg-pink-100 text-pink-800',
+  storyboard: 'bg-yellow-100 text-yellow-800',
+  production: 'bg-orange-100 text-orange-800',
+  editing: 'bg-green-100 text-green-800',
+  final_review: 'bg-teal-100 text-teal-800',
+  published: 'bg-emerald-100 text-emerald-800',
+};
+---
+
+<DashboardLayout title="Dashboard">
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+      Dashboard
+    </h1>
+    <p class="text-[var(--color-v-gray)] mt-1">Overview of your Virtuelia production pipeline</p>
+  </div>
+
+  <!-- Stats cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white rounded-xl p-5 border border-gray-100">
+      <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Total videos</p>
+      <p class="text-3xl font-bold text-[var(--color-v-dark)]">{videos.length}</p>
+    </div>
+    <div class="bg-white rounded-xl p-5 border border-gray-100">
+      <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Total stories</p>
+      <p class="text-3xl font-bold text-[var(--color-v-dark)]">{stories.length}</p>
+      <p class="text-xs text-green-600 mt-1">{storiesComplete} complete</p>
+    </div>
+    <div class="bg-white rounded-xl p-5 border border-gray-100">
+      <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">SEL validation</p>
+      <p class="text-3xl font-bold text-[var(--color-v-dark)]">{selApproved}/{stories.length}</p>
+      <p class="text-xs text-yellow-600 mt-1">{selPending} pending review</p>
+    </div>
+    <div class="bg-white rounded-xl p-5 border border-gray-100">
+      <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Resources</p>
+      <p class="text-sm text-[var(--color-v-dark)] mt-2">{traitCount} SEL traits</p>
+      <p class="text-sm text-[var(--color-v-dark)]">{countryCount} countries</p>
+    </div>
+  </div>
+
+  <!-- Recent videos -->
+  <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <h2 class="text-lg font-semibold">Recent videos</h2>
+      <a href="/dashboard/videos" class="text-sm text-[var(--color-v-teal)] hover:underline">View all</a>
+    </div>
+    {videos.length === 0 ? (
+      <div class="p-12 text-center">
+        <p class="text-[var(--color-v-gray)] mb-4">No videos yet. Start by creating your first video.</p>
+        <a href="/dashboard/videos?new=true" class="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-v-teal)] text-white rounded-lg text-sm font-medium hover:bg-[var(--color-v-teal-dark)] transition-colors">
+          Create first video
+        </a>
+      </div>
+    ) : (
+      <div class="divide-y divide-gray-50">
+        {videos.map(video => (
+          <a href={`/dashboard/videos/${video.id}`} class="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-sm truncate">{video.title}</p>
+              {video.child_name && <p class="text-xs text-[var(--color-v-gray)]">Protagonist: {video.child_name}</p>}
+            </div>
+            <span class:list={['text-xs px-2 py-1 rounded-full font-medium', statusColors[video.status] || 'bg-gray-100 text-gray-600']}>
+              {video.status.replace('_', ' ')}
+            </span>
+          </a>
+        ))}
+      </div>
+    )}
+  </div>
+</DashboardLayout>

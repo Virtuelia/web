@@ -1,0 +1,189 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { CHARACTER_LABELS, COMPETENCY_LABELS, COMPETENCY_COLORS, formatDate } from '@/lib/helpers';
+import type { Character } from '@/lib/database.types';
+
+const supabase = Astro.locals.supabase;
+
+// Fetch all characters with story counts
+const { data: characters, error } = await supabase
+  .from('characters')
+  .select(`
+    id,
+    name,
+    display_name,
+    animal,
+    competency,
+    personality,
+    sel_function,
+    signature_phrases,
+    signature_sounds,
+    color_primary,
+    color_secondary,
+    model_sheet_url,
+    created_at
+  `)
+  .order('name');
+
+// Get story counts for each character as lead
+const characterList = await Promise.all(
+  (characters as any[])?.map(async (char) => {
+    const { count } = await supabase
+      .from('stories')
+      .select('*', { count: 'exact', head: true })
+      .eq('lead_character', char.name);
+
+    return {
+      ...char,
+      stories_count: count || 0,
+    };
+  }) || []
+);
+---
+
+<DashboardLayout title="Characters">
+  <!-- Header -->
+  <div class="mb-8">
+    <div>
+      <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+        Characters
+      </h1>
+      <p class="text-[var(--color-v-gray)] mt-1">Meet the five animal friends of Virtuelia</p>
+    </div>
+  </div>
+
+  {characterList.length === 0 ? (
+    <!-- Empty state -->
+    <div class="bg-white rounded-xl border border-gray-100 p-12 text-center">
+      <p class="text-[var(--color-v-gray)] mb-4">No characters found.</p>
+    </div>
+  ) : (
+    <!-- Character grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-6">
+      {characterList.map((character) => (
+        <div
+          class="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-lg transition-shadow"
+          style={`border-top: 4px solid ${character.color_primary || '#999'}`}
+        >
+          <!-- Header with competency badge -->
+          <div class="px-6 py-4 border-b border-gray-100 flex items-start justify-between">
+            <div class="flex-1">
+              <h2 class="text-xl font-bold text-[var(--color-v-dark)]">
+                {character.display_name}
+              </h2>
+              <p class="text-sm text-[var(--color-v-gray)] mt-1">
+                {character.animal}
+              </p>
+            </div>
+            <span
+              class="text-xs px-3 py-1 rounded-full font-medium text-white whitespace-nowrap ml-2"
+              style={`background-color: ${COMPETENCY_COLORS[character.competency]}`}
+            >
+              {COMPETENCY_LABELS[character.competency]}
+            </span>
+          </div>
+
+          <!-- Content -->
+          <div class="px-6 py-4 space-y-4">
+            <!-- Personality -->
+            {character.personality && (
+              <div>
+                <p class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide mb-1">
+                  Personality
+                </p>
+                <p class="text-sm text-[var(--color-v-dark)]">
+                  {character.personality}
+                </p>
+              </div>
+            )}
+
+            <!-- SEL Function -->
+            {character.sel_function && (
+              <div>
+                <p class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide mb-1">
+                  SEL Role
+                </p>
+                <p class="text-sm text-[var(--color-v-dark)]">
+                  {character.sel_function}
+                </p>
+              </div>
+            )}
+
+            <!-- Signature Phrases -->
+            {character.signature_phrases && character.signature_phrases.length > 0 && (
+              <div>
+                <p class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide mb-2">
+                  Signature Phrases
+                </p>
+                <div class="space-y-1">
+                  {character.signature_phrases.map((phrase: string) => (
+                    <p class="text-sm text-[var(--color-v-dark)] flex items-start gap-2">
+                      <span class="text-[var(--color-v-teal)] font-bold mt-0.5">•</span>
+                      <span>{phrase}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <!-- Signature Sounds -->
+            {character.signature_sounds && (
+              <div>
+                <p class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide mb-1">
+                  Signature Sound
+                </p>
+                <p class="text-sm text-[var(--color-v-dark)] italic">
+                  "{character.signature_sounds}"
+                </p>
+              </div>
+            )}
+
+            <!-- Color swatches -->
+            <div class="pt-2">
+              <p class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide mb-2">
+                Brand Colors
+              </p>
+              <div class="flex gap-3">
+                {character.color_primary && (
+                  <div class="flex items-center gap-2">
+                    <div
+                      class="w-8 h-8 rounded-lg border border-gray-200"
+                      style={`background-color: ${character.color_primary}`}
+                    ></div>
+                    <span class="text-xs text-[var(--color-v-gray)]">{character.color_primary}</span>
+                  </div>
+                )}
+                {character.color_secondary && (
+                  <div class="flex items-center gap-2">
+                    <div
+                      class="w-8 h-8 rounded-lg border border-gray-200"
+                      style={`background-color: ${character.color_secondary}`}
+                    ></div>
+                    <span class="text-xs text-[var(--color-v-gray)]">{character.color_secondary}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer with story count -->
+          <div class="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+            <span class="text-xs text-[var(--color-v-gray)]">
+              <span class="font-semibold text-[var(--color-v-dark)]">{character.stories_count}</span>
+              {character.stories_count === 1 ? ' story' : ' stories'} as lead character
+            </span>
+            {character.model_sheet_url && (
+              <a
+                href={character.model_sheet_url}
+                target="_blank"
+                class="text-xs text-[var(--color-v-teal)] hover:underline"
+              >
+                Model Sheet →
+              </a>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</DashboardLayout>

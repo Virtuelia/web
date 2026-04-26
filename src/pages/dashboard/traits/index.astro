@@ -1,0 +1,249 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { COMPETENCY_LABELS, COMPETENCY_COLORS, CHARACTER_LABELS, formatDate } from '@/lib/helpers';
+import type { SelTrait, SelCompetency } from '@/lib/database.types';
+
+const supabase = Astro.locals.supabase;
+
+// Fetch all SEL traits
+const { data: traits, error } = await supabase
+  .from('sel_traits')
+  .select('*')
+  .order('competency')
+  .order('category')
+  .order('name');
+
+const traitsList = (traits as SelTrait[]) || [];
+
+// Get unique categories
+const categories = Array.from(new Set(traitsList.map((t) => t.category))).sort();
+
+// Get unique age ranges
+const ageRanges = Array.from(new Set(traitsList.map((t) => t.age_range))).sort();
+
+// Group traits by competency, then by category
+function groupTraits(traits: SelTrait[]) {
+  const grouped: Record<SelCompetency, Record<string, SelTrait[]>> = {
+    self_awareness: {},
+    self_regulation: {},
+    social_skills: {},
+    responsible_decisions: {},
+    social_awareness: {},
+  };
+
+  traits.forEach((trait) => {
+    if (!grouped[trait.competency]) {
+      grouped[trait.competency] = {};
+    }
+    if (!grouped[trait.competency][trait.category]) {
+      grouped[trait.competency][trait.category] = [];
+    }
+    grouped[trait.competency][trait.category].push(trait);
+  });
+
+  return grouped;
+}
+
+const groupedTraits = groupTraits(traitsList);
+const competencies: SelCompetency[] = ['self_awareness', 'self_regulation', 'social_skills', 'responsible_decisions', 'social_awareness'];
+---
+
+<DashboardLayout title="SEL Traits Library">
+  <!-- Header -->
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+      SEL Traits Library
+    </h1>
+    <p class="text-[var(--color-v-gray)] mt-1">
+      {traitsList.length} {traitsList.length === 1 ? 'trait' : 'traits'} in library
+    </p>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="mb-8 flex gap-4 flex-wrap">
+    <select
+      id="competencyFilter"
+      class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+    >
+      <option value="">All competencies</option>
+      {competencies.map((comp) => (
+        <option value={comp}>{COMPETENCY_LABELS[comp]}</option>
+      ))}
+    </select>
+
+    <select
+      id="categoryFilter"
+      class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+    >
+      <option value="">All categories</option>
+      {categories.map((cat) => (
+        <option value={cat}>{cat}</option>
+      ))}
+    </select>
+
+    <select
+      id="ageRangeFilter"
+      class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+    >
+      <option value="">All age ranges</option>
+      {ageRanges.map((age) => (
+        <option value={age}>{age} years</option>
+      ))}
+    </select>
+
+    <input
+      type="text"
+      id="searchInput"
+      placeholder="Search traits by name..."
+      class="flex-1 min-w-64 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+    />
+  </div>
+
+  {traitsList.length === 0 ? (
+    <!-- Empty state -->
+    <div class="bg-white rounded-xl border border-gray-100 p-12 text-center">
+      <p class="text-[var(--color-v-gray)] mb-4">No traits found in library.</p>
+    </div>
+  ) : (
+    <!-- Traits organized by competency -->
+    <div class="space-y-8" id="traitsContainer">
+      {competencies.map((competency) => {
+        const competencyTraits = groupedTraits[competency];
+        const categoryList = Object.keys(competencyTraits).sort();
+
+        // Check if any traits in this competency should be shown
+        const hasVisibleTraits = Object.values(competencyTraits).some((cats) =>
+          cats.some((trait) => {
+            const searchTerm = '';
+            return trait.name.toLowerCase().includes(searchTerm.toLowerCase());
+          })
+        );
+
+        return (
+          <div
+            class="competency-section"
+            data-competency={competency}
+            style={{ display: hasVisibleTraits ? 'block' : 'none' }}
+          >
+            <!-- Competency header -->
+            <div
+              class="px-6 py-4 rounded-lg mb-4 text-white"
+              style={`background-color: ${COMPETENCY_COLORS[competency]}`}
+            >
+              <h2 class="text-lg font-bold">
+                {COMPETENCY_LABELS[competency]}
+              </h2>
+            </div>
+
+            <!-- Categories within competency -->
+            <div class="space-y-6 pl-4">
+              {categoryList.map((category) => (
+                <div class="category-group" data-category={category}>
+                  <h3 class="text-sm font-semibold text-[var(--color-v-gray)] uppercase tracking-wider mb-3 pb-2 border-b border-gray-200">
+                    {category}
+                  </h3>
+
+                  <!-- Traits grid -->
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {competencyTraits[category]?.map((trait) => (
+                      <div
+                        class="trait-card bg-white rounded-lg border border-gray-100 p-4 hover:shadow-md transition-shadow"
+                        data-name={trait.name.toLowerCase()}
+                        data-age-range={trait.age_range}
+                      >
+                        <!-- Trait name -->
+                        <h4 class="font-semibold text-[var(--color-v-dark)] mb-2">
+                          {trait.name}
+                        </h4>
+
+                        <!-- Description -->
+                        {trait.description && (
+                          <p class="text-xs text-[var(--color-v-gray)] mb-3 line-clamp-2">
+                            {trait.description}
+                          </p>
+                        )}
+
+                        <!-- Badges -->
+                        <div class="flex gap-2 flex-wrap">
+                          <span class="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-700">
+                            {trait.age_range} years
+                          </span>
+                          {trait.lead_character && (
+                            <span
+                              class="text-xs px-2 py-1 rounded-full font-medium text-white"
+                              style={`background-color: var(--color-${trait.lead_character})`}
+                            >
+                              {CHARACTER_LABELS[trait.lead_character].split(' ')[0]}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  )}
+
+  <script>
+    const competencyFilter = document.getElementById('competencyFilter');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const ageRangeFilter = document.getElementById('ageRangeFilter');
+    const searchInput = document.getElementById('searchInput');
+    const traitsContainer = document.getElementById('traitsContainer');
+
+    function applyFilters() {
+      const competency = competencyFilter?.value || '';
+      const category = categoryFilter?.value || '';
+      const ageRange = ageRangeFilter?.value || '';
+      const search = (searchInput?.value || '').toLowerCase();
+
+      // Filter trait cards
+      const traitCards = traitsContainer?.querySelectorAll('.trait-card');
+      traitCards?.forEach((card) => {
+        const cardName = card.getAttribute('data-name');
+        const cardAgeRange = card.getAttribute('data-age-range');
+        const section = card.closest('.category-group');
+        const sectionCategory = section?.getAttribute('data-category');
+        const competencySection = section?.closest('.competency-section');
+        const sectionCompetency = competencySection?.getAttribute('data-competency');
+
+        const nameMatch = !search || cardName.includes(search);
+        const competencyMatch = !competency || sectionCompetency === competency;
+        const categoryMatch = !category || sectionCategory === category;
+        const ageMatch = !ageRange || cardAgeRange === ageRange;
+
+        if (nameMatch && competencyMatch && categoryMatch && ageMatch) {
+          (card as HTMLElement).style.display = '';
+        } else {
+          (card as HTMLElement).style.display = 'none';
+        }
+      });
+
+      // Show/hide category groups based on visible cards
+      const categoryGroups = traitsContainer?.querySelectorAll('.category-group');
+      categoryGroups?.forEach((group) => {
+        const visibleCards = group.querySelectorAll('.trait-card:not([style*="display: none"])');
+        const groupElement = group as HTMLElement;
+        groupElement.style.display = visibleCards.length > 0 ? '' : 'none';
+      });
+
+      // Show/hide competency sections based on visible groups
+      const competencySections = traitsContainer?.querySelectorAll('.competency-section');
+      competencySections?.forEach((section) => {
+        const visibleGroups = section.querySelectorAll('.category-group:not([style*="display: none"])');
+        const sectionElement = section as HTMLElement;
+        sectionElement.style.display = visibleGroups.length > 0 ? '' : 'none';
+      });
+    }
+
+    competencyFilter?.addEventListener('change', applyFilters);
+    categoryFilter?.addEventListener('change', applyFilters);
+    ageRangeFilter?.addEventListener('change', applyFilters);
+    searchInput?.addEventListener('input', applyFilters);
+  </script>
+</DashboardLayout>

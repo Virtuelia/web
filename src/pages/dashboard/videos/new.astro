@@ -1,0 +1,374 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import type { Country } from '@/lib/database.types';
+
+const supabase = Astro.locals.supabase;
+
+// Fetch countries for the form
+const { data: countries } = await supabase
+  .from('countries')
+  .select('id, name, code')
+  .order('name', { ascending: true });
+
+const countryList = (countries as Country[]) || [];
+---
+
+<DashboardLayout title="Create Video">
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+      Create New Video
+    </h1>
+    <p class="text-[var(--color-v-gray)] mt-1">Start a new video project in your production pipeline</p>
+  </div>
+
+  <form
+    id="videoForm"
+    class="bg-white rounded-xl border border-gray-100 p-8 max-w-3xl"
+  >
+    <!-- Title field -->
+    <div class="mb-6">
+      <label for="title" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+        Title <span class="text-red-500">*</span>
+      </label>
+      <input
+        type="text"
+        id="title"
+        name="title"
+        required
+        class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+        placeholder="Video title"
+      />
+    </div>
+
+    <!-- Content Type and Age Range row -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div>
+        <label for="contentType" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+          Content Type <span class="text-red-500">*</span>
+        </label>
+        <select
+          id="contentType"
+          name="contentType"
+          required
+          class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+        >
+          <option value="">Select content type</option>
+          <option value="youtube_video">YouTube Video</option>
+          <option value="youtube_short">YouTube Short</option>
+          <option value="web_article">Web Article</option>
+          <option value="web_lesson">Web Lesson</option>
+          <option value="web_activity">Web Activity</option>
+          <option value="social_post">Social Post</option>
+        </select>
+      </div>
+      <div>
+        <label for="ageRange" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+          Age Range <span class="text-red-500">*</span>
+        </label>
+        <select
+          id="ageRange"
+          name="ageRange"
+          required
+          class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+        >
+          <option value="">Select age range</option>
+          <option value="4-6">4-6 years</option>
+          <option value="5-8">5-8 years</option>
+          <option value="7-10">7-10 years</option>
+          <option value="9-12">9-12 years</option>
+          <option value="4-12">4-12 years</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Child Protagonist Section -->
+    <fieldset class="border-t border-gray-200 pt-8 mb-8">
+      <legend class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Child Protagonist</legend>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label for="childName" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+            Name
+          </label>
+          <input
+            type="text"
+            id="childName"
+            name="childName"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            placeholder="Child character name"
+          />
+        </div>
+        <div>
+          <label for="childAge" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+            Age
+          </label>
+          <input
+            type="number"
+            id="childAge"
+            name="childAge"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            placeholder="Age in years"
+          />
+        </div>
+      </div>
+      <div class="mt-6">
+        <label for="childPersonality" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+          Personality
+        </label>
+        <textarea
+          id="childPersonality"
+          name="childPersonality"
+          rows="3"
+          class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+          placeholder="Describe the child's personality traits and characteristics"
+        ></textarea>
+      </div>
+      <div class="mt-6">
+        <label for="childVisual" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+          Visual Description
+        </label>
+        <textarea
+          id="childVisual"
+          name="childVisual"
+          rows="3"
+          class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+          placeholder="Describe visual appearance, clothing, features"
+        ></textarea>
+      </div>
+    </fieldset>
+
+    <!-- SEL Section -->
+    <fieldset class="border-t border-gray-200 pt-8 mb-8">
+      <legend class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Social-Emotional Learning</legend>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label for="competency" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+            Primary Competency
+          </label>
+          <select
+            id="competency"
+            name="competency"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+          >
+            <option value="">Select competency</option>
+            <option value="self_awareness">Self-Awareness</option>
+            <option value="self_regulation">Self-Regulation</option>
+            <option value="social_skills">Social Skills</option>
+            <option value="responsible_decisions">Responsible Decisions</option>
+            <option value="social_awareness">Social Awareness</option>
+          </select>
+        </div>
+        <div>
+          <label for="theme" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+            Primary Theme
+          </label>
+          <input
+            type="text"
+            id="theme"
+            name="theme"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            placeholder="e.g. Coping with disappointment"
+          />
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Production Section -->
+    <fieldset class="border-t border-gray-200 pt-8 mb-8">
+      <legend class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Production</legend>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label for="duration" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+            Target Duration (minutes)
+          </label>
+          <input
+            type="number"
+            id="duration"
+            name="duration"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            placeholder="5"
+          />
+        </div>
+        <div>
+          <label for="storyCount" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+            Planned Story Count
+          </label>
+          <input
+            type="number"
+            id="storyCount"
+            name="storyCount"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            placeholder="3"
+          />
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Cultural Section -->
+    <fieldset class="border-t border-gray-200 pt-8 mb-8">
+      <legend class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Cultural Context</legend>
+      <div class="mb-6">
+        <label for="country" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+          Country / Region
+        </label>
+        <select
+          id="country"
+          name="country"
+          class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+        >
+          <option value="">Select country/region</option>
+          {countryList.map(c => (
+            <option value={c.id}>{c.name} ({c.code})</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label for="culturalNotes" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+          Cultural Notes
+        </label>
+        <textarea
+          id="culturalNotes"
+          name="culturalNotes"
+          rows="3"
+          class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+          placeholder="Cultural research, considerations, and notes"
+        ></textarea>
+      </div>
+    </fieldset>
+
+    <!-- Narrator Section -->
+    <fieldset class="border-t border-gray-200 pt-8 mb-8">
+      <legend class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Narrator</legend>
+      <div class="mb-6">
+        <label for="narratorOpening" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+          Opening Line
+        </label>
+        <textarea
+          id="narratorOpening"
+          name="narratorOpening"
+          rows="2"
+          class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+          placeholder="Narrator introduction"
+        ></textarea>
+      </div>
+      <div>
+        <label for="narratorClosing" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+          Closing Line
+        </label>
+        <textarea
+          id="narratorClosing"
+          name="narratorClosing"
+          rows="2"
+          class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+          placeholder="Narrator conclusion"
+        ></textarea>
+      </div>
+    </fieldset>
+
+    <!-- Team Notes Section -->
+    <fieldset class="border-t border-gray-200 pt-8 mb-8">
+      <legend class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Team Notes</legend>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div>
+          <label for="notesAlin" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+            Alin's Notes
+          </label>
+          <textarea
+            id="notesAlin"
+            name="notesAlin"
+            rows="3"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            placeholder="Notes from Alin"
+          ></textarea>
+        </div>
+        <div>
+          <label for="notesDavid" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+            David's Notes
+          </label>
+          <textarea
+            id="notesDavid"
+            name="notesDavid"
+            rows="3"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            placeholder="Notes from David"
+          ></textarea>
+        </div>
+        <div>
+          <label for="notesEmi" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
+            Emi's Notes
+          </label>
+          <textarea
+            id="notesEmi"
+            name="notesEmi"
+            rows="3"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
+            placeholder="Notes from Emi"
+          ></textarea>
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Submit button -->
+    <div class="flex gap-4 border-t border-gray-200 pt-8">
+      <button
+        type="submit"
+        class="px-6 py-2 bg-[var(--color-v-teal)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+      >
+        Create Video
+      </button>
+      <a
+        href="/dashboard/videos"
+        class="px-6 py-2 border border-gray-200 text-[var(--color-v-dark)] rounded-lg font-medium hover:bg-gray-50 transition-colors"
+      >
+        Cancel
+      </a>
+    </div>
+  </form>
+</DashboardLayout>
+
+<script>
+  const form = document.getElementById('videoForm') as HTMLFormElement;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = {
+      title: (document.getElementById('title') as HTMLInputElement).value,
+      content_type: (document.getElementById('contentType') as HTMLSelectElement).value,
+      age_range: (document.getElementById('ageRange') as HTMLSelectElement).value,
+      child_name: (document.getElementById('childName') as HTMLInputElement).value || null,
+      child_age: (document.getElementById('childAge') as HTMLInputElement).value ? parseInt((document.getElementById('childAge') as HTMLInputElement).value) : null,
+      child_personality: (document.getElementById('childPersonality') as HTMLTextAreaElement).value || null,
+      child_visual_description: (document.getElementById('childVisual') as HTMLTextAreaElement).value || null,
+      primary_competency: (document.getElementById('competency') as HTMLSelectElement).value || null,
+      primary_theme: (document.getElementById('theme') as HTMLInputElement).value || null,
+      target_duration_minutes: (document.getElementById('duration') as HTMLInputElement).value ? parseInt((document.getElementById('duration') as HTMLInputElement).value) : null,
+      planned_story_count: (document.getElementById('storyCount') as HTMLInputElement).value ? parseInt((document.getElementById('storyCount') as HTMLInputElement).value) : 0,
+      country_id: (document.getElementById('country') as HTMLSelectElement).value || null,
+      cultural_notes: (document.getElementById('culturalNotes') as HTMLTextAreaElement).value || null,
+      narrator_opening: (document.getElementById('narratorOpening') as HTMLTextAreaElement).value || null,
+      narrator_closing: (document.getElementById('narratorClosing') as HTMLTextAreaElement).value || null,
+      notes_alin: (document.getElementById('notesAlin') as HTMLTextAreaElement).value || null,
+      notes_david: (document.getElementById('notesDavid') as HTMLTextAreaElement).value || null,
+      notes_emi: (document.getElementById('notesEmi') as HTMLTextAreaElement).value || null,
+    };
+
+    try {
+      const response = await fetch('/api/videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert('Error creating video: ' + (error.error || 'Unknown error'));
+        return;
+      }
+
+      const result = await response.json();
+      window.location.href = `/dashboard/videos/${result.data.id}`;
+    } catch (error) {
+      alert('Error creating video: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  });
+</script>
