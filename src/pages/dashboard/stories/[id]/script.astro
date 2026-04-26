@@ -118,14 +118,12 @@ const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || st
           <button
             id="btnImage"
             class="flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-[var(--color-v-teal)] bg-[var(--color-v-teal)] text-white transition-all"
-            onclick="selectType('image')"
           >
             📸 Image (nanobanana)
           </button>
           <button
             id="btnVideo"
             class="flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-gray-200 text-[var(--color-v-gray)] transition-all"
-            onclick="selectType('video')"
           >
             🎥 Video (Grok)
           </button>
@@ -234,6 +232,9 @@ const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || st
       renderSavedPrompts(savedVideoPrompts);
     }
   }
+
+  document.getElementById('btnImage').addEventListener('click', () => selectType('image'));
+  document.getElementById('btnVideo').addEventListener('click', () => selectType('video'));
 
   document.getElementById('generateBtn').addEventListener('click', async () => {
     const btn = document.getElementById('generateBtn');
