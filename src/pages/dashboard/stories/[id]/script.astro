@@ -1,0 +1,252 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { BEAT_LABELS, BEAT_COLORS, CHARACTER_LABELS, COMPETENCY_LABELS } from '@/lib/helpers';
+import type { BeatType } from '@/lib/database.types';
+
+const supabase = Astro.locals.supabase;
+const { id } = Astro.params;
+
+const { data: story } = await supabase
+  .from('stories')
+  .select(`
+    *,
+    beats: story_beats(*),
+    videos (id, title, child_name, child_age, primary_competency)
+  `)
+  .eq('id', id)
+  .single();
+
+if (!story) {
+  return new Response('Story not found', { status: 404 });
+}
+
+const beatOrder: BeatType[] = ['hook', 'context', 'the_moment', 'the_reaction', 'the_bridge', 'the_shift', 'the_glow'];
+const beats = beatOrder.map(bt => {
+  const existing = (story.beats || []).find((b: any) => b.beat === bt);
+  return { beat: bt, ...(existing || {}) };
+});
+
+const hasContent = beats.some((b: any) => b.content);
+const characterLabel = CHARACTER_LABELS[story.lead_character as any] || story.lead_character;
+const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || story.primary_competency;
+---
+
+<DashboardLayout title={`Script — ${story.title}`}>
+  <!-- Back -->
+  <div class="mb-6 flex items-center justify-between">
+    <a href={`/dashboard/stories/${id}`} class="text-sm text-[var(--color-v-teal)] hover:underline">
+      ← Back to Story
+    </a>
+    {story.videos?.id && (
+      <a href={`/dashboard/videos/${story.videos.id}`} class="text-sm text-[var(--color-v-gray)] hover:underline">
+        {story.videos.title}
+      </a>
+    )}
+  </div>
+
+  <!-- Header -->
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+      {story.story_number}. {story.title}
+    </h1>
+    <div class="flex gap-3 mt-2 flex-wrap text-sm text-[var(--color-v-gray)]">
+      <span>{characterLabel}</span>
+      <span>·</span>
+      <span>{competencyLabel}</span>
+      {story.sel_tool_modeled && <><span>·</span><span>{story.sel_tool_modeled}</span></>}
+      {story.videos?.child_name && <><span>·</span><span>Child: {story.videos.child_name}</span></>}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+    <!-- Left: Full script read view -->
+    <div class="lg:col-span-3">
+      <div class="bg-white rounded-xl border border-gray-100 p-8">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-6">Full Script</h2>
+
+        {!hasContent && (
+          <div class="text-center py-12">
+            <p class="text-[var(--color-v-gray)] mb-4">No beats content yet.</p>
+            <a href={`/dashboard/stories/${id}`} class="text-[var(--color-v-teal)] hover:underline text-sm">
+              Go fill in the beats →
+            </a>
+          </div>
+        )}
+
+        <div class="space-y-8">
+          {beats.map((beat: any) => {
+            const label = BEAT_LABELS[beat.beat as BeatType];
+            const colors = BEAT_COLORS[beat.beat as BeatType];
+            if (!beat.content && !beat.narrator_line) return null;
+            return (
+              <div class={`rounded-lg border-l-4 pl-5 py-1 ${colors}`}>
+                <p class="text-xs font-bold uppercase tracking-widest text-[var(--color-v-gray)] mb-2">{label}</p>
+                {beat.narrator_line && (
+                  <p class="text-sm italic text-[var(--color-v-gray)] mb-2">
+                    🎙 {beat.narrator_line}
+                  </p>
+                )}
+                {beat.content && (
+                  <p class="text-sm text-[var(--color-v-dark)] leading-relaxed whitespace-pre-wrap">
+                    {beat.content}
+                  </p>
+                )}
+                {beat.emotion_energy && (
+                  <p class="text-xs text-[var(--color-v-gray)] mt-2">⚡ {beat.emotion_energy}</p>
+                )}
+                {beat.visual_notes && (
+                  <p class="text-xs text-[var(--color-v-gray)] mt-1">🎬 {beat.visual_notes}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Prompt Generator -->
+    <div class="lg:col-span-2">
+      <div class="bg-white rounded-xl border border-gray-100 p-6 sticky top-8">
+        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-1">Prompt Generator</h2>
+        <p class="text-xs text-[var(--color-v-gray)] mb-6">Generate ~20 prompts from story beats</p>
+
+        <!-- Type selector -->
+        <div class="flex gap-2 mb-6">
+          <button
+            id="btnImage"
+            class="flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-[var(--color-v-teal)] bg-[var(--color-v-teal)] text-white transition-all"
+            onclick="selectType('image')"
+          >
+            📸 Image (nanobanana)
+          </button>
+          <button
+            id="btnVideo"
+            class="flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-gray-200 text-[var(--color-v-gray)] transition-all"
+            onclick="selectType('video')"
+          >
+            🎥 Video (Grok)
+          </button>
+        </div>
+
+        <button
+          id="generateBtn"
+          class="w-full py-3 bg-[var(--color-v-teal)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity mb-6 disabled:opacity-50"
+        >
+          Generate Prompts
+        </button>
+
+        <!-- Loading state -->
+        <div id="loadingState" class="hidden text-center py-8">
+          <div class="inline-block w-8 h-8 border-4 border-[var(--color-v-teal)] border-t-transparent rounded-full animate-spin mb-3"></div>
+          <p class="text-sm text-[var(--color-v-gray)]">Generating prompts with Claude...</p>
+        </div>
+
+        <!-- Results -->
+        <div id="resultsSection" class="hidden">
+          <div class="flex items-center justify-between mb-3">
+            <p id="promptCount" class="text-sm font-semibold text-[var(--color-v-dark)]"></p>
+            <button
+              id="copyAllBtn"
+              class="text-xs px-3 py-1 border border-[var(--color-v-teal)] text-[var(--color-v-teal)] rounded-lg hover:bg-[var(--color-v-teal)] hover:text-white transition-all"
+            >
+              Copy All
+            </button>
+          </div>
+          <div id="promptsList" class="space-y-3 max-h-[60vh] overflow-y-auto pr-1"></div>
+        </div>
+
+        <!-- Error state -->
+        <div id="errorState" class="hidden">
+          <p id="errorMsg" class="text-sm text-red-600 bg-red-50 rounded-lg p-3"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</DashboardLayout>
+
+<script define:vars={{ storyId: id }}>
+  let selectedType = 'image';
+
+  function selectType(type) {
+    selectedType = type;
+    const btnImage = document.getElementById('btnImage');
+    const btnVideo = document.getElementById('btnVideo');
+    if (type === 'image') {
+      btnImage.className = 'flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-[var(--color-v-teal)] bg-[var(--color-v-teal)] text-white transition-all';
+      btnVideo.className = 'flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-gray-200 text-gray-500 transition-all';
+    } else {
+      btnVideo.className = 'flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-[var(--color-v-teal)] bg-[var(--color-v-teal)] text-white transition-all';
+      btnImage.className = 'flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-gray-200 text-gray-500 transition-all';
+    }
+  }
+
+  document.getElementById('generateBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('generateBtn');
+    const loading = document.getElementById('loadingState');
+    const results = document.getElementById('resultsSection');
+    const errorState = document.getElementById('errorState');
+
+    btn.disabled = true;
+    loading.classList.remove('hidden');
+    results.classList.add('hidden');
+    errorState.classList.add('hidden');
+
+    try {
+      const response = await fetch(`/api/stories/${storyId}/prompts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: selectedType }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Generation failed');
+      }
+
+      const prompts = data.prompts;
+      document.getElementById('promptCount').textContent = `${prompts.length} prompts`;
+
+      const list = document.getElementById('promptsList');
+      list.innerHTML = '';
+
+      prompts.forEach((prompt, idx) => {
+        const div = document.createElement('div');
+        div.className = 'bg-gray-50 rounded-lg p-3 relative group';
+        div.innerHTML = `
+          <p class="text-xs text-[var(--color-v-gray)] font-semibold mb-1">#${idx + 1}</p>
+          <p class="text-xs text-[var(--color-v-dark)] leading-relaxed">${prompt}</p>
+          <button
+            class="copy-btn absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-xs px-2 py-1 bg-white border border-gray-200 rounded hover:border-[var(--color-v-teal)] transition-all"
+            data-prompt="${prompt.replace(/"/g, '&quot;')}"
+          >Copy</button>
+        `;
+        list.appendChild(div);
+      });
+
+      list.querySelectorAll('.copy-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          navigator.clipboard.writeText(this.getAttribute('data-prompt'));
+          this.textContent = 'Copied!';
+          setTimeout(() => { this.textContent = 'Copy'; }, 1500);
+        });
+      });
+
+      document.getElementById('copyAllBtn').onclick = () => {
+        const allText = prompts.join('\n\n');
+        navigator.clipboard.writeText(allText);
+        const btn = document.getElementById('copyAllBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy All'; }, 2000);
+      };
+
+      results.classList.remove('hidden');
+    } catch (err) {
+      document.getElementById('errorMsg').textContent = err.message;
+      errorState.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      loading.classList.add('hidden');
+    }
+  });
+</script>
