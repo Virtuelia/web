@@ -6,9 +6,4 @@ export default defineConfig({
   adapter: cloudflare({
     platformProxy: { enabled: true }
   }),
-  vite: {
-    css: {
-      transformer: 'lightningcss'
-    }
-  }
 });
