@@ -1,0 +1,58 @@
+---
+export const prerender = false;
+---
+<!DOCTYPE html>
+<html>
+<head><title>Signing in...</title></head>
+<body>
+  <script>
+    import { createClient } from '@supabase/supabase-js';
+
+    const supabase = createClient(
+      import.meta.env.PUBLIC_SUPABASE_URL,
+      import.meta.env.PUBLIC_SUPABASE_ANON_KEY
+    );
+
+    async function handleCallback() {
+      // Handle PKCE flow (code in query params)
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+
+      // Handle implicit flow (tokens in hash)
+      const hash = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hash.get('access_token');
+      const refreshToken = hash.get('refresh_token');
+
+      let session = null;
+
+      if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!error) session = data.session;
+      } else if (accessToken && refreshToken) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (!error) session = data.session;
+      }
+
+      if (session) {
+        // Send tokens to server to set HttpOnly cookies
+        await fetch('/api/auth/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          }),
+        });
+        window.location.href = '/dashboard';
+      } else {
+        window.location.href = '/login';
+      }
+    }
+
+    handleCallback();
+  </script>
+</body>
+</html>
