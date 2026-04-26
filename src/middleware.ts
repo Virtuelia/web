@@ -2,8 +2,9 @@ import { defineMiddleware } from 'astro:middleware';
 import { createServerClient } from './lib/supabase';
 
 export const onRequest = defineMiddleware(async (context, next) => {
-  const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
+  const runtime = (context.locals as any).runtime?.env;
+  const supabaseUrl = runtime?.PUBLIC_SUPABASE_URL ?? import.meta.env.PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = runtime?.PUBLIC_SUPABASE_ANON_KEY ?? import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return next();
