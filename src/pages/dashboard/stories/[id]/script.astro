@@ -16,6 +16,9 @@ const { data: story } = await supabase
   .eq('id', id)
   .single();
 
+const savedImagePrompts: string[] = (story as any)?.image_prompts || [];
+const savedVideoPrompts: string[] = (story as any)?.video_prompts || [];
+
 if (!story) {
   return new Response('Story not found', { status: 404 });
 }
@@ -142,9 +145,11 @@ const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || st
         </div>
 
         <!-- Results -->
-        <div id="resultsSection" class="hidden">
+        <div id="resultsSection" class={savedImagePrompts.length > 0 ? '' : 'hidden'}>
           <div class="flex items-center justify-between mb-3">
-            <p id="promptCount" class="text-sm font-semibold text-[var(--color-v-dark)]"></p>
+            <p id="promptCount" class="text-sm font-semibold text-[var(--color-v-dark)]">
+              {savedImagePrompts.length > 0 ? `${savedImagePrompts.length} prompts saved` : ''}
+            </p>
             <button
               id="copyAllBtn"
               class="text-xs px-3 py-1 border border-[var(--color-v-teal)] text-[var(--color-v-teal)] rounded-lg hover:bg-[var(--color-v-teal)] hover:text-white transition-all"
@@ -152,7 +157,18 @@ const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || st
               Copy All
             </button>
           </div>
-          <div id="promptsList" class="space-y-3 max-h-[60vh] overflow-y-auto pr-1"></div>
+          <div id="promptsList" class="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            {savedImagePrompts.map((prompt, idx) => (
+              <div class="bg-gray-50 rounded-lg p-3 relative group">
+                <p class="text-xs text-[var(--color-v-gray)] font-semibold mb-1">#{idx + 1}</p>
+                <p class="text-xs text-[var(--color-v-dark)] leading-relaxed">{prompt}</p>
+                <button
+                  class="copy-btn absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-xs px-2 py-1 bg-white border border-gray-200 rounded hover:border-[var(--color-v-teal)] transition-all"
+                  data-prompt={prompt}
+                >Copy</button>
+              </div>
+            ))}
+          </div>
         </div>
 
         <!-- Error state -->
@@ -164,8 +180,45 @@ const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || st
   </div>
 </DashboardLayout>
 
-<script define:vars={{ storyId: id }}>
+<script define:vars={{ storyId: id, savedImagePrompts, savedVideoPrompts }}>
   let selectedType = 'image';
+
+  function renderSavedPrompts(prompts) {
+    const list = document.getElementById('promptsList');
+    const results = document.getElementById('resultsSection');
+    const countEl = document.getElementById('promptCount');
+    if (!prompts || prompts.length === 0) {
+      results.classList.add('hidden');
+      return;
+    }
+    list.innerHTML = '';
+    prompts.forEach((prompt, idx) => {
+      const div = document.createElement('div');
+      div.className = 'bg-gray-50 rounded-lg p-3 relative group';
+      div.innerHTML = `
+        <p class="text-xs text-[var(--color-v-gray)] font-semibold mb-1">#${idx + 1}</p>
+        <p class="text-xs text-[var(--color-v-dark)] leading-relaxed">${prompt}</p>
+        <button class="copy-btn absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-xs px-2 py-1 bg-white border border-gray-200 rounded hover:border-[var(--color-v-teal)] transition-all" data-prompt="${prompt.replace(/"/g, '&quot;')}">Copy</button>
+      `;
+      list.appendChild(div);
+    });
+    list.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        navigator.clipboard.writeText(this.getAttribute('data-prompt'));
+        this.textContent = 'Copied!';
+        setTimeout(() => { this.textContent = 'Copy'; }, 1500);
+      });
+    });
+    countEl.textContent = `${prompts.length} prompts saved`;
+    results.classList.remove('hidden');
+
+    document.getElementById('copyAllBtn').onclick = () => {
+      navigator.clipboard.writeText(prompts.join('\n\n'));
+      const btn = document.getElementById('copyAllBtn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy All'; }, 2000);
+    };
+  }
 
   function selectType(type) {
     selectedType = type;
@@ -174,9 +227,11 @@ const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || st
     if (type === 'image') {
       btnImage.className = 'flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-[var(--color-v-teal)] bg-[var(--color-v-teal)] text-white transition-all';
       btnVideo.className = 'flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-gray-200 text-gray-500 transition-all';
+      renderSavedPrompts(savedImagePrompts);
     } else {
       btnVideo.className = 'flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-[var(--color-v-teal)] bg-[var(--color-v-teal)] text-white transition-all';
       btnImage.className = 'flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-gray-200 text-gray-500 transition-all';
+      renderSavedPrompts(savedVideoPrompts);
     }
   }
 

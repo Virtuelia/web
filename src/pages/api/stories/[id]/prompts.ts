@@ -170,6 +170,12 @@ Generate exactly 20 ${type === 'image' ? 'image prompts for nanobanana' : 'video
     const text = (message.content[0] as any).text as string;
     const prompts = text.split('\n\n').map((p: string) => p.trim()).filter((p: string) => p.length > 0);
 
+    const column = type === 'image' ? 'image_prompts' : 'video_prompts';
+    await supabase
+      .from('stories')
+      .update({ [column]: prompts, prompts_generated_at: new Date().toISOString() })
+      .eq('id', storyId);
+
     return new Response(JSON.stringify({ prompts, type }), { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
