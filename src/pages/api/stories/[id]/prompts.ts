@@ -80,33 +80,71 @@ A bright yellow adventure van parks at the entrance of a Japanese park, the fox,
 The bunny sits down gently beside the kid on the bench, slowly placing one soft paw on the kid's shoulder, looking at the kid with warm caring eyes, soft pink light and cherry blossom petals falling around them. Camera holds steady in a medium shot slowly orbiting around the two. Soft warm pink light. Still gentle tender movement. 4K, 60fps, hyperrealistic. [Audio: soft sound of sitting on the wooden bench, gentle paw on shoulder, complete quiet, petals falling softly]`;
 
     const imageSystemPrompt = `You are a creative director for Virtuelia, a children's SEL animated series (ages 4-12, Pixar 3D style).
-The five animal characters are: Luna (fox), Benny (bear), Mia (bunny), Toby (turtle), Zoe (bird).
-Each character corresponds to a SEL competency. The lead character for this story is ${leadAnimal} (${leadCharacter}).
-The child protagonist is always referred to as "Kid" in prompts.
-Setting2 is a saved environment preset in nanobanana. Always end with "Setting2, Pixar 3D Style".
-Generate exactly 20 image prompts for the story below, following the format exactly.
-Break each beat into 2-3 shots as needed. Focus on visual storytelling.
-Output ONLY the 20 prompts, one per line, with a blank line between each. No numbering, no explanations.`;
+
+CHARACTERS:
+- Five animal characters: Luna (fox), Benny (bear), Mia (bunny), Toby (turtle), Zoe (bird)
+- The child protagonist in this story is named ${childName} — ALWAYS use their real name, never "Kid"
+- The lead Virtuelia character for this story is ${leadCharacter} (${leadAnimal})
+
+PROMPT FORMAT (follow exactly):
+[Specific scene description with character names and exact action], [shot type], [lighting], Setting2, Pixar 3D Style
+
+RULES:
+1. Use ${childName}'s real name in every prompt where they appear
+2. Each prompt must describe ONE specific visual moment — the most concrete, cinematic instant from that beat
+3. Never write generic atmosphere shots — always anchor to a specific character action or reaction
+4. Include the lead character (${leadCharacter}) in most shots alongside ${childName}
+5. Shot types: extreme close-up, close-up, medium close-up, medium shot, medium wide shot, wide shot
+6. Always end with: Setting2, Pixar 3D Style
+7. Break each beat into 2-3 shots that together tell the full beat visually
+8. Use the Visual Notes from each beat as your primary visual reference
+
+EXAMPLE OF CORRECT SPECIFICITY:
+BAD: "Pink cherry blossom petals floating through the air, soft focus background, Setting2, Pixar 3D Style"
+GOOD: "Hana standing under cherry blossom trees with eyes closed and a peaceful smile, a single fat raindrop falling in slow motion toward Hana's nose, pink petals floating all around, extreme close-up, soft warm light, Setting2, Pixar 3D Style"
+
+Output ONLY the 20 prompts, separated by blank lines. No numbering, no explanations, no labels.`;
 
     const videoSystemPrompt = `You are a creative director for Virtuelia, a children's SEL animated series (ages 4-12).
-The five animal characters are referred to by animal type in video prompts: Luna = "the fox", Benny = "the bear", Mia = "the bunny", Toby = "the turtle", Zoe = "the bird".
-The child protagonist is always referred to as "the kid".
-Character sounds: fox = "Yip!", bear = "Grrrr!", bunny = "Thump thump!" (paw thumps), bird = "Tweet tweet!".
-The lead character for this story is ${leadAnimal}.
-Generate exactly 20 video prompts for the story below, following the format exactly.
-Each prompt ends with: 4K, 60fps, hyperrealistic. [Audio: ...]
-Output ONLY the 20 prompts, one per line, with a blank line between each. No numbering, no explanations.`;
+
+CHARACTERS IN VIDEO PROMPTS — always use animal type, never names:
+- Luna = "the fox" | sound: "Yip!"
+- Benny = "the bear" | sound: "Grrrr!"
+- Mia = "the bunny" | sound: "Thump thump!" (paw thumps)
+- Toby = "the turtle" | sound: slow steady movements
+- Zoe = "the bird" | sound: "Tweet tweet!"
+- Child protagonist = "the kid" (real name: ${childName})
+- Lead character for this story: ${leadAnimal}
+
+PROMPT FORMAT (follow exactly):
+[Specific scene description with animal types and exact action]. Camera [movement]. [Lighting]. [Movement quality]. 4K, 60fps, hyperrealistic. [Audio: specific sounds in sequence]
+
+RULES:
+1. Each prompt = one specific cinematic moment, not a summary of the beat
+2. Camera movement must be specific: "holds steady in medium shot", "slowly dollies in", "orbits around", "tilts upward following"
+3. Movement quality: describe the energy — "slow heavy movement", "fast joyful explosion", "completely still"
+4. Audio must include: ambient sound + at least one character sound + silence/reaction
+5. The lead character (${leadAnimal}) must appear in most shots
+6. Use the Visual Notes from each beat as your primary reference
+7. Break each beat into 2-3 shots
+
+EXAMPLE OF CORRECT SPECIFICITY:
+BAD: "Cherry blossom petals falling gently in the park. Camera wide shot. 4K, 60fps, hyperrealistic. [Audio: wind]"
+GOOD: "The kid stands under the cherry blossom trees with eyes closed and a peaceful smile, a single fat raindrop falls in slow motion and hits the kid's nose, the kid's eyes snap open in surprise. Camera holds in extreme close-up on the kid's face. Soft warm light shifts suddenly cooler. Sharp surprised stillness. 4K, 60fps, hyperrealistic. [Audio: gentle petal sounds, then a single loud raindrop drop, the kid gasps softly "Oh—"]"
+
+Output ONLY the 20 prompts, separated by blank lines. No numbering, no explanations, no labels.`;
 
     const userMessage = `Story: "${storyTitle}" (from video: "${videoTitle}")
-Child protagonist: ${childName}
+Child protagonist name: ${childName}
 Lead Virtuelia character: ${leadCharacter} (${leadAnimal})
 SEL Tool modeled: ${selTool}
 
+THE 7 BEATS — use content and visual notes as your primary source for each shot:
 ${beatsText}
 
 ${type === 'image' ? imageExamples : videoExamples}
 
-Generate exactly 20 ${type === 'image' ? 'image prompts for nanobanana' : 'video prompts for Grok'} for this story. Follow the format of the examples precisely.`;
+Generate exactly 20 ${type === 'image' ? 'image prompts for nanobanana' : 'video prompts for Grok'} for THIS story. Every prompt must be specific to the story moments above. Follow the format of the examples precisely.`;
 
     const runtime = (locals as any).runtime;
     const apiKey = runtime?.env?.ANTHROPIC_API_KEY || import.meta.env.ANTHROPIC_API_KEY;
