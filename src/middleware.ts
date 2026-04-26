@@ -44,6 +44,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   return next();
   } catch (e: any) {
-    return new Response(`Middleware error: ${e?.message ?? String(e)}\n\nStack: ${e?.stack ?? ''}`, { status: 500 });
+    const runtime = (context.locals as any).runtime?.env;
+    const debugInfo = {
+      error: e?.message ?? String(e),
+      runtimeKeys: Object.keys(runtime || {}),
+      runtimeUrl: String(runtime?.PUBLIC_SUPABASE_URL).substring(0, 60),
+      metaUrl: String(import.meta.env.PUBLIC_SUPABASE_URL).substring(0, 60),
+    };
+    return new Response(JSON.stringify(debugInfo, null, 2), { status: 500, headers: { 'content-type': 'text/plain' } });
   }
 });
