@@ -463,7 +463,7 @@ const selChecks = [
   if (saveBeatsBtn) {
     saveBeatsBtn.addEventListener('click', async () => {
       const beats = [];
-      document.querySelectorAll('[data-beat]').forEach(beatEl => {
+      document.querySelectorAll('div[data-beat]').forEach(beatEl => {
         const beatType = beatEl.getAttribute('data-beat');
         const content = (beatEl.querySelector('[data-field="content"]') as HTMLTextAreaElement)?.value || '';
         const emotion_energy = (beatEl.querySelector('[data-field="emotion_energy"]') as HTMLInputElement)?.value || '';
