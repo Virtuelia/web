@@ -140,11 +140,51 @@ const nextStatus = currentIndex < statusWorkflow.length - 1 ? statusWorkflow[cur
             </p>
           </div>
           <div>
-            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Visual Description</p>
-            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="child_visual_description">
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider">Visual Description</p>
+              <button
+                id="generateCharacterBtn"
+                class="text-xs px-2 py-1 border border-[var(--color-v-teal)] text-[var(--color-v-teal)] rounded hover:bg-[var(--color-v-teal)] hover:text-white transition-all"
+              >
+                ✨ Generate
+              </button>
+            </div>
+            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" id="visualDescDisplay" data-field="child_visual_description">
               {videoData.child_visual_description || '—'}
             </p>
           </div>
+        </div>
+      </div>
+
+      <!-- Character Generator Panel (hidden by default) -->
+      <div id="characterPanel" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-6 mb-6">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-semibold text-[var(--color-v-dark)]">Generated Character Description</h3>
+          <button id="closeCharacterPanel" class="text-[var(--color-v-gray)] hover:text-[var(--color-v-dark)] text-lg">×</button>
+        </div>
+        <div id="characterLoading" class="hidden text-center py-4">
+          <div class="inline-block w-6 h-6 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mb-2"></div>
+          <p class="text-xs text-[var(--color-v-gray)]">Generating with Claude...</p>
+        </div>
+        <textarea
+          id="characterOutput"
+          rows="4"
+          class="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white mb-3"
+          placeholder="Description will appear here..."
+        ></textarea>
+        <div class="flex gap-2">
+          <button
+            id="saveCharacterBtn"
+            class="px-4 py-2 bg-[var(--color-v-teal)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            Save Description
+          </button>
+          <button
+            id="regenerateCharacterBtn"
+            class="px-4 py-2 border border-amber-300 text-[var(--color-v-gray)] rounded-lg text-sm hover:bg-amber-100 transition-colors"
+          >
+            Regenerate
+          </button>
         </div>
       </div>
 
@@ -547,6 +587,67 @@ const nextStatus = currentIndex < statusWorkflow.length - 1 ? statusWorkflow[cur
       }
     });
   }
+
+  // Generate Character
+  const generateCharacterBtn = document.getElementById('generateCharacterBtn');
+  const characterPanel = document.getElementById('characterPanel') as HTMLDivElement;
+  const characterLoading = document.getElementById('characterLoading') as HTMLDivElement;
+  const characterOutput = document.getElementById('characterOutput') as HTMLTextAreaElement;
+  const saveCharacterBtn = document.getElementById('saveCharacterBtn') as HTMLButtonElement;
+  const regenerateCharacterBtn = document.getElementById('regenerateCharacterBtn') as HTMLButtonElement;
+  const closeCharacterPanel = document.getElementById('closeCharacterPanel') as HTMLButtonElement;
+  const visualDescDisplay = document.getElementById('visualDescDisplay') as HTMLParagraphElement;
+
+  async function generateCharacter() {
+    characterPanel.classList.remove('hidden');
+    characterLoading.classList.remove('hidden');
+    characterOutput.value = '';
+
+    try {
+      const response = await fetch(`/api/videos/${videoId}/generate-character`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Generation failed');
+      characterOutput.value = data.description;
+    } catch (err) {
+      characterOutput.value = 'Error: ' + (err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      characterLoading.classList.add('hidden');
+    }
+  }
+
+  generateCharacterBtn?.addEventListener('click', generateCharacter);
+  regenerateCharacterBtn?.addEventListener('click', generateCharacter);
+
+  closeCharacterPanel?.addEventListener('click', () => {
+    characterPanel.classList.add('hidden');
+  });
+
+  saveCharacterBtn?.addEventListener('click', async () => {
+    const description = characterOutput.value.trim();
+    if (!description) return;
+
+    try {
+      const response = await fetch(`/api/videos/${videoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ child_visual_description: description }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert('Error saving: ' + (error.error || 'Unknown error'));
+        return;
+      }
+
+      visualDescDisplay.textContent = description;
+      characterPanel.classList.add('hidden');
+    } catch (err) {
+      alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  });
 
   // Delete video
   deleteBtn.addEventListener('click', async () => {

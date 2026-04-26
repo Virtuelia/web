@@ -21,7 +21,7 @@ export const POST: APIRoute = async ({ locals, params, request }) => {
       .select(`
         *,
         beats: story_beats(*),
-        videos (id, title, child_name, child_age, primary_competency, primary_theme, cultural_notes, country:countries(name))
+        videos (id, title, child_name, child_age, child_visual_description, primary_competency, primary_theme, cultural_notes, country:countries(name))
       `)
       .eq('id', storyId)
       .single();
@@ -53,6 +53,7 @@ export const POST: APIRoute = async ({ locals, params, request }) => {
     const leadAnimal = characterAnimals[leadCharacter] || leadCharacter;
     const leadSound = characterSounds[leadCharacter] || '';
     const childName = story.videos?.child_name || 'Kid';
+    const childVisualDescription = story.videos?.child_visual_description || null;
     const selTool = story.sel_tool_modeled || '';
     const storyTitle = story.title || 'Story';
     const videoTitle = story.videos?.title || '';
@@ -134,8 +135,12 @@ GOOD: "The kid stands under the cherry blossom trees with eyes closed and a peac
 
 Output ONLY the 20 prompts, separated by blank lines. No numbering, no explanations, no labels.`;
 
+    const childDescription = childVisualDescription
+      ? `Child protagonist name: ${childName}\nChild visual description (use this in every prompt where ${childName} appears): ${childVisualDescription}`
+      : `Child protagonist name: ${childName}\n(No visual description saved yet — use name only)`;
+
     const userMessage = `Story: "${storyTitle}" (from video: "${videoTitle}")
-Child protagonist name: ${childName}
+${childDescription}
 Lead Virtuelia character: ${leadCharacter} (${leadAnimal})
 SEL Tool modeled: ${selTool}
 
