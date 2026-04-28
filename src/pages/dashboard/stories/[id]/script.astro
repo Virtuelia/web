@@ -11,7 +11,7 @@ const { data: story } = await supabase
   .select(`
     *,
     beats: story_beats(*),
-    videos (id, title, child_name, child_age, primary_competency)
+    videos (id, title, child_name, child_age, primary_competency, narrator_opening, narrator_closing)
   `)
   .eq('id', id)
   .single();
@@ -32,6 +32,49 @@ const beats = beatOrder.map(bt => {
 const hasContent = beats.some((b: any) => b.content);
 const characterLabel = CHARACTER_LABELS[story.lead_character as any] || story.lead_character;
 const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || story.primary_competency;
+
+// Build narrator script with cumulative timestamps
+function formatTime(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+const BEAT_LABELS_SHORT: Record<string, string> = {
+  hook: 'HOOK', context: 'CONTEXT', the_moment: 'THE MOMENT',
+  the_reaction: 'THE REACTION', the_bridge: 'THE BRIDGE',
+  the_shift: 'THE SHIFT', the_glow: 'THE GLOW',
+};
+
+interface NarratorLine {
+  timestamp: string;
+  label: string;
+  text: string;
+}
+
+const narratorLines: NarratorLine[] = [];
+let cumulativeSeconds = 0;
+
+if (story.videos?.narrator_opening) {
+  narratorLines.push({ timestamp: '0:00', label: 'OPENING', text: story.videos.narrator_opening });
+}
+
+for (const beat of beats) {
+  if ((beat as any).narrator_line) {
+    narratorLines.push({
+      timestamp: formatTime(cumulativeSeconds),
+      label: BEAT_LABELS_SHORT[beat.beat] || beat.beat.toUpperCase(),
+      text: (beat as any).narrator_line,
+    });
+  }
+  cumulativeSeconds += (beat as any).duration_seconds || 0;
+}
+
+if (story.videos?.narrator_closing) {
+  narratorLines.push({ timestamp: formatTime(cumulativeSeconds), label: 'CLOSING', text: story.videos.narrator_closing });
+}
+
+const hasNarratorScript = narratorLines.length > 0;
 ---
 
 <DashboardLayout title={`Script — ${story.title}`}>
@@ -62,8 +105,47 @@ const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || st
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
-    <!-- Left: Full script read view -->
-    <div class="lg:col-span-3">
+    <!-- Left: Narrator Script + Full script -->
+    <div class="lg:col-span-3 space-y-6">
+
+      <!-- Narrator Script -->
+      {hasNarratorScript && (
+        <div class="bg-[var(--color-v-dark)] rounded-xl p-8 text-white">
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h2 class="text-lg font-semibold">🎙 Narrator Script</h2>
+              <p class="text-xs text-gray-400 mt-1">Read aloud in sequence — timestamps indicate when each line starts</p>
+            </div>
+            <button
+              id="copyNarratorBtn"
+              class="text-xs px-3 py-1.5 border border-gray-500 text-gray-300 rounded-lg hover:border-white hover:text-white transition-all"
+            >
+              Copy Script
+            </button>
+          </div>
+          <div class="space-y-6" id="narratorLines">
+            {narratorLines.map((line) => (
+              <div class="flex gap-4">
+                <div class="shrink-0 text-right w-12">
+                  <span class="text-xs font-mono text-[var(--color-v-teal)] font-bold">{line.timestamp}</span>
+                </div>
+                <div class="border-l border-gray-600 pl-4 pb-2">
+                  <p class="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">{line.label}</p>
+                  <p class="text-base leading-relaxed text-gray-100 italic">"{line.text}"</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!hasNarratorScript && (
+        <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-6 text-center">
+          <p class="text-sm text-[var(--color-v-gray)]">No narrator lines yet. Add <code class="text-xs bg-gray-100 px-1 rounded">narrator_line</code> in beats or <code class="text-xs bg-gray-100 px-1 rounded">narrator_opening/closing</code> in the video.</p>
+        </div>
+      )}
+
+      <!-- Full script read view -->
       <div class="bg-white rounded-xl border border-gray-100 p-8">
         <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-6">Full Script</h2>
 
@@ -105,6 +187,7 @@ const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || st
           })}
         </div>
       </div>
+    </div>
     </div>
 
     <!-- Right: Prompt Generator -->
@@ -178,7 +261,7 @@ const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || st
   </div>
 </DashboardLayout>
 
-<script define:vars={{ storyId: id, savedImagePrompts, savedVideoPrompts }}>
+<script define:vars={{ storyId: id, savedImagePrompts, savedVideoPrompts, narratorLines, storyTitle: story.title }}>
   let selectedType = 'image';
 
   function renderSavedPrompts(prompts) {
@@ -231,6 +314,18 @@ const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || st
       btnImage.className = 'flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-gray-200 text-gray-500 transition-all';
       renderSavedPrompts(savedVideoPrompts);
     }
+  }
+
+  // Copy Narrator Script
+  const copyNarratorBtn = document.getElementById('copyNarratorBtn');
+  if (copyNarratorBtn && narratorLines.length > 0) {
+    copyNarratorBtn.addEventListener('click', () => {
+      const text = `NARRATOR SCRIPT — "${storyTitle}"\n\n` +
+        narratorLines.map(l => `[${l.timestamp} — ${l.label}]\n"${l.text}"`).join('\n\n');
+      navigator.clipboard.writeText(text);
+      copyNarratorBtn.textContent = 'Copied!';
+      setTimeout(() => { copyNarratorBtn.textContent = 'Copy Script'; }, 2000);
+    });
   }
 
   document.getElementById('btnImage').addEventListener('click', () => selectType('image'));
