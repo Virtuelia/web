@@ -1,637 +1,692 @@
 ---
 import DashboardLayout from '@/layouts/DashboardLayout.astro';
-import { STORY_STATUS_LABELS, STORY_STATUS_COLORS, CHARACTER_LABELS, COMPETENCY_LABELS, BEAT_LABELS, BEAT_COLORS, BEAT_DESCRIPTIONS, formatDate } from '@/lib/helpers';
-import type { Story, StoryBeat, BeatType } from '@/lib/database.types';
+import {
+  STORY_STATUS_LABELS, STORY_STATUS_COLORS,
+  CHARACTER_LABELS, COMPETENCY_LABELS,
+  BEAT_LABELS, BEAT_COLORS, BEAT_DESCRIPTIONS,
+  formatDate,
+} from '@/lib/helpers';
+import type { BeatType } from '@/lib/database.types';
 
 const supabase = Astro.locals.supabase;
 const { id } = Astro.params;
 
-// Fetch story with beats
 const { data: story, error: storyError } = await supabase
   .from('stories')
   .select(`
     *,
     beats: story_beats(*),
-    character_moments(*),
-    trait: primary_trait_id(*),
-    videos (id, title)
+    videos (id, title, child_name, child_age, child_visual_description,
+            narrator_opening, narrator_closing, primary_competency)
   `)
   .eq('id', id)
   .single();
 
-if (!story) {
-  return new Response('Story not found', { status: 404 });
-}
+if (!story) return new Response('Story not found', { status: 404 });
 
-const storyData = story as any;
-const beatTypes: BeatType[] = ['hook', 'context', 'the_moment', 'the_reaction', 'the_bridge', 'the_shift', 'the_glow'];
-const existingBeats = (storyData.beats || []) as StoryBeat[];
-
-// Create beat objects (including empty ones if they don't exist)
-const beats = beatTypes.map((beatType, index) => {
-  const existing = existingBeats.find(b => b.beat === beatType);
-  return {
-    beat: beatType,
-    content: existing?.content || '',
-    emotion_energy: existing?.emotion_energy || '',
-    narrator_line: existing?.narrator_line || '',
-    visual_notes: existing?.visual_notes || '',
-    duration_seconds: existing?.duration_seconds || 0,
-  };
+const beatOrder: BeatType[] = ['hook', 'context', 'the_moment', 'the_reaction', 'the_bridge', 'the_shift', 'the_glow'];
+const beats = beatOrder.map(bt => {
+  const existing = (story.beats || []).find((b: any) => b.beat === bt);
+  return { beat: bt, content: '', emotion_energy: '', narrator_line: '', visual_notes: '', duration_seconds: 0, ...(existing || {}) };
 });
 
-const videoId = storyData.videos?.id;
-const videoTitle = storyData.videos?.title;
-const characterLabel = CHARACTER_LABELS[storyData.lead_character];
-const competencyLabel = COMPETENCY_LABELS[storyData.primary_competency];
+const characterLabel = CHARACTER_LABELS[story.lead_character as any] || story.lead_character;
+const competencyLabel = COMPETENCY_LABELS[story.primary_competency as any] || story.primary_competency;
+const videoId = story.videos?.id;
+const videoTitle = story.videos?.title || 'Video';
 
-// Count SEL checks
-const selChecks = [
-  storyData.sel_emotion_accurate,
-  storyData.sel_tool_evidence_based,
-  storyData.sel_resolution_realistic,
-  storyData.sel_content_safe,
-  storyData.sel_message_clear,
-  storyData.sel_cultural_check,
-].filter(Boolean).length;
+// Narrator script with timestamps
+function formatTime(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+const BEAT_SHORT: Record<string, string> = {
+  hook: 'HOOK', context: 'CONTEXT', the_moment: 'THE MOMENT',
+  the_reaction: 'THE REACTION', the_bridge: 'THE BRIDGE',
+  the_shift: 'THE SHIFT', the_glow: 'THE GLOW',
+};
+const narratorLines: { timestamp: string; label: string; text: string }[] = [];
+let cumSec = 0;
+if (story.videos?.narrator_opening) narratorLines.push({ timestamp: '0:00', label: 'OPENING', text: story.videos.narrator_opening });
+for (const beat of beats) {
+  if ((beat as any).narrator_line) narratorLines.push({ timestamp: formatTime(cumSec), label: BEAT_SHORT[beat.beat], text: (beat as any).narrator_line });
+  cumSec += (beat as any).duration_seconds || 0;
+}
+if (story.videos?.narrator_closing) narratorLines.push({ timestamp: formatTime(cumSec), label: 'CLOSING', text: story.videos.narrator_closing });
+
+const savedImagePrompts: string[] = (story as any).image_prompts || [];
+const savedVideoPrompts: string[] = (story as any).video_prompts || [];
+const savedBookText: string = (story as any).book_text || '';
+
+const selChecks = [story.sel_emotion_accurate, story.sel_tool_evidence_based, story.sel_resolution_realistic,
+  story.sel_content_safe, story.sel_message_clear, story.sel_cultural_check].filter(Boolean).length;
+
+const breadcrumb = [
+  { label: 'Videos', href: '/dashboard/videos' },
+  { label: videoTitle, href: `/dashboard/videos/${videoId}` },
+  { label: `${story.story_number}. ${story.title || 'Story'}` },
+];
+
+const tabs = [
+  { id: 'overview', icon: '📋', label: 'Overview' },
+  { id: 'beats', icon: '✏️', label: 'Beats' },
+  { id: 'sel', icon: '✅', label: 'SEL Review' },
+  { id: 'production', icon: '🎬', label: 'Production' },
+  { id: 'narrator', icon: '🎙', label: 'Narrator' },
+  { id: 'book', icon: '📖', label: 'Book' },
+  { id: 'prompts', icon: '🖼️', label: 'Prompts' },
+];
 ---
 
-<DashboardLayout title={storyData.title || `Story ${storyData.story_number}`}>
-  <!-- Back link to video -->
-  {videoId && (
-    <div class="mb-6">
-      <a href={`/dashboard/videos/${videoId}`} class="text-sm text-[var(--color-v-teal)] hover:underline">
-        ← Back to {videoTitle}
-      </a>
-    </div>
-  )}
+<DashboardLayout title={story.title || `Story ${story.story_number}`} breadcrumb={breadcrumb}>
 
-  <!-- Header -->
-  <div class="mb-8 flex items-start justify-between">
+  <!-- Story Header -->
+  <div class="mb-6 flex items-start justify-between">
     <div>
-      <h1 class="text-3xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
-        {storyData.story_number}. {storyData.title || `Story ${storyData.story_number}`}
+      <h1 class="text-2xl font-bold text-[var(--color-v-dark)]" style="font-family: var(--font-display)">
+        {story.story_number}. {story.title || `Story ${story.story_number}`}
       </h1>
-      <div class="flex gap-2 mt-3 flex-wrap">
-        <span class:list={['inline-block text-sm px-3 py-1 rounded-full font-medium', STORY_STATUS_COLORS[storyData.status] || 'bg-gray-100 text-gray-600']}>
-          {STORY_STATUS_LABELS[storyData.status]}
+      <div class="flex gap-2 mt-2 flex-wrap">
+        <span class:list={['text-xs px-2 py-1 rounded-full font-medium', STORY_STATUS_COLORS[story.status] || 'bg-gray-100 text-gray-600']}>
+          {STORY_STATUS_LABELS[story.status]}
         </span>
-        <span class="inline-block text-sm px-3 py-1 rounded-full font-medium bg-indigo-100 text-indigo-800">
-          {characterLabel}
-        </span>
-        <span class="inline-block text-sm px-3 py-1 rounded-full font-medium bg-violet-100 text-violet-800">
-          {competencyLabel}
-        </span>
+        <span class="text-xs px-2 py-1 rounded-full font-medium bg-indigo-100 text-indigo-800">{characterLabel}</span>
+        <span class="text-xs px-2 py-1 rounded-full font-medium bg-violet-100 text-violet-800">{competencyLabel}</span>
+        {story.sel_tool_modeled && <span class="text-xs px-2 py-1 rounded-full font-medium bg-teal-100 text-teal-800">{story.sel_tool_modeled}</span>}
       </div>
     </div>
-    <a
-      href={`/dashboard/stories/${id}/script`}
-      class="px-4 py-2 bg-[var(--color-v-teal)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
-    >
-      <span>🎬</span> Script & Prompts
-    </a>
   </div>
 
-  <!-- Main grid: beats on left, validation on right -->
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-    <!-- Left/Center: 7-Beat Editor (spans 2 columns) -->
-    <div class="lg:col-span-2">
-      <!-- Story Meta Section -->
-      <div class="bg-white rounded-xl border border-gray-100 p-6 mb-8">
-        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Story Details</h2>
-        <div class="space-y-4" id="metaSection">
-          <div>
-            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Title</p>
-            <p class="text-sm text-[var(--color-v-dark)] font-medium" data-field="title">
-              {storyData.title || '—'}
-            </p>
+  <!-- Tab Navigation -->
+  <div class="flex gap-1 border-b border-gray-200 mb-8 overflow-x-auto">
+    {tabs.map(tab => (
+      <button
+        class="tab-btn flex items-center gap-1.5 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-[var(--color-v-gray)] hover:text-[var(--color-v-dark)] transition-colors"
+        data-tab={tab.id}
+      >
+        <span>{tab.icon}</span> {tab.label}
+      </button>
+    ))}
+  </div>
+
+  <!-- TAB: OVERVIEW -->
+  <div id="tab-overview" class="tab-panel hidden">
+    <div class="max-w-2xl space-y-6">
+      <div class="bg-white rounded-xl border border-gray-100 p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-semibold text-[var(--color-v-dark)]">Story Details</h2>
+          <button id="editStoryBtn" class="text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">Edit</button>
+        </div>
+        <div class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wide mb-1">Lead Character</p>
+              <p class="text-sm font-medium text-[var(--color-v-dark)]">{characterLabel}</p>
+            </div>
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wide mb-1">Competency</p>
+              <p class="text-sm font-medium text-[var(--color-v-dark)]">{competencyLabel}</p>
+            </div>
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Lead Character</p>
-              <p class="text-sm text-[var(--color-v-dark)]" data-field="lead_character">
-                {characterLabel}
-              </p>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wide mb-1">SEL Tool</p>
+              <p class="text-sm text-[var(--color-v-dark)]">{story.sel_tool_modeled || '—'}</p>
             </div>
             <div>
-              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Primary Competency</p>
-              <p class="text-sm text-[var(--color-v-dark)]" data-field="primary_competency">
-                {competencyLabel}
-              </p>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wide mb-1">Key Phrase</p>
+              <p class="text-sm text-[var(--color-v-dark)] italic">"{story.key_phrase || '—'}"</p>
             </div>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wide mb-1">Situation</p>
+            <p class="text-sm text-[var(--color-v-dark)] leading-relaxed">{story.situation_description || '—'}</p>
+          </div>
+          <div>
+            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wide mb-1">Duration</p>
+            <p class="text-sm text-[var(--color-v-dark)]">{story.duration_minutes} minutes</p>
+          </div>
+          {story.videos?.child_name && (
+            <div>
+              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wide mb-1">Child Protagonist</p>
+              <p class="text-sm text-[var(--color-v-dark)]">{story.videos.child_name}{story.videos.child_age ? `, age ${story.videos.child_age}` : ''}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <!-- Edit form (hidden) -->
+      <div id="editStoryForm" class="hidden bg-white rounded-xl border border-gray-100 p-6">
+        <h3 class="text-base font-semibold text-[var(--color-v-dark)] mb-4">Edit Story</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">Title</label>
+            <input type="text" id="edit_title" value={story.title || ''} class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">SEL Tool Modeled</p>
-              <p class="text-sm text-[var(--color-v-dark)]" data-field="sel_tool_modeled">
-                {storyData.sel_tool_modeled || '—'}
-              </p>
+              <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">SEL Tool</label>
+              <input type="text" id="edit_selTool" value={story.sel_tool_modeled || ''} class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
             </div>
             <div>
-              <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Key Phrase</p>
-              <p class="text-sm text-[var(--color-v-dark)]" data-field="key_phrase">
-                {storyData.key_phrase || '—'}
-              </p>
+              <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">Key Phrase</label>
+              <input type="text" id="edit_keyPhrase" value={story.key_phrase || ''} class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
             </div>
           </div>
           <div>
-            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Situation Description</p>
-            <p class="text-sm text-[var(--color-v-dark)] whitespace-pre-wrap" data-field="situation_description">
-              {storyData.situation_description || '—'}
-            </p>
+            <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">Situation Description</label>
+            <textarea id="edit_situation" rows="3" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]">{story.situation_description || ''}</textarea>
           </div>
           <div>
-            <p class="text-xs text-[var(--color-v-gray)] uppercase tracking-wider mb-1">Duration</p>
-            <p class="text-sm text-[var(--color-v-dark)]" data-field="duration_minutes">
-              {storyData.duration_minutes} minutes
-            </p>
+            <label class="text-xs font-semibold text-[var(--color-v-gray)] uppercase tracking-wide block mb-1">Duration (minutes)</label>
+            <input type="number" id="edit_duration" value={story.duration_minutes || 5} min="1" max="30" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button id="saveStoryBtn" class="px-4 py-2 bg-[var(--color-v-teal)] text-white rounded-lg text-sm font-medium hover:opacity-90">Save</button>
+            <button id="cancelEditBtn" class="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
           </div>
         </div>
       </div>
 
-      <!-- 7-Beat Timeline -->
-      <div class="mb-8">
-        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Story Structure - 7 Beats</h2>
-
-        <div class="space-y-4" id="beatsContainer">
-          {beats.map((beat, idx) => {
-            const colors = BEAT_COLORS[beat.beat as BeatType];
-            const label = BEAT_LABELS[beat.beat as BeatType];
-            const description = BEAT_DESCRIPTIONS[beat.beat as BeatType];
-
-            return (
-              <div class={`rounded-xl border-l-4 p-6 transition-all ${colors}`} data-beat={beat.beat}>
-                <!-- Beat header -->
-                <div class="flex items-start justify-between mb-4 cursor-pointer beat-toggle" onClick="this.closest('[data-beat]').classList.toggle('beat-collapsed')">
-                  <div class="flex-1">
-                    <h3 class="text-lg font-semibold text-[var(--color-v-dark)]">{label}</h3>
-                    <p class="text-xs text-[var(--color-v-gray)] italic mt-1">{description}</p>
-                  </div>
-                  <button
-                    type="button"
-                    class="text-[var(--color-v-gray)] hover:text-[var(--color-v-dark)] transition-colors beat-toggle-btn"
-                    onClick="event.stopPropagation()"
-                  >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
-                    </svg>
-                  </button>
-                </div>
-
-                <!-- Beat content (collapsible) -->
-                <div class="beat-content space-y-4">
-                  <!-- Content -->
-                  <div>
-                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
-                      Story Content
-                    </label>
-                    <textarea
-                      class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
-                      rows="4"
-                      data-field="content"
-                      data-beat={beat.beat}
-                    >{beat.content}</textarea>
-                  </div>
-
-                  <!-- Emotion/Energy -->
-                  <div>
-                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
-                      Emotion & Energy Level
-                    </label>
-                    <input
-                      type="text"
-                      class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
-                      placeholder="e.g., Anxious/medium, Happy/high"
-                      data-field="emotion_energy"
-                      data-beat={beat.beat}
-                      value={beat.emotion_energy}
-                    />
-                  </div>
-
-                  <!-- Narrator Line -->
-                  <div>
-                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
-                      Narrator Line
-                    </label>
-                    <textarea
-                      class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
-                      rows="2"
-                      placeholder="What does the narrator say?"
-                      data-field="narrator_line"
-                      data-beat={beat.beat}
-                    >{beat.narrator_line}</textarea>
-                  </div>
-
-                  <!-- Visual Notes -->
-                  <div>
-                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
-                      Visual Notes (for David)
-                    </label>
-                    <textarea
-                      class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
-                      rows="2"
-                      placeholder="Animation, storyboard, visual style notes..."
-                      data-field="visual_notes"
-                      data-beat={beat.beat}
-                    >{beat.visual_notes}</textarea>
-                  </div>
-
-                  <!-- Duration -->
-                  <div>
-                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
-                      Duration (seconds)
-                    </label>
-                    <input
-                      type="number"
-                      class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
-                      min="0"
-                      placeholder="0"
-                      data-field="duration_seconds"
-                      data-beat={beat.beat}
-                      value={beat.duration_seconds}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <!-- Save Beats Button -->
-        <button
-          id="saveBeatsBtn"
-          class="mt-8 w-full px-6 py-3 bg-[var(--color-v-teal)] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
-        >
-          Save All Beats
-        </button>
+      <!-- Danger Zone -->
+      <div class="bg-white rounded-xl border border-red-100 p-5">
+        <h3 class="text-sm font-semibold text-red-800 mb-3">Danger Zone</h3>
+        <button id="deleteStoryBtn" class="px-4 py-2 bg-red-100 text-red-800 rounded-lg text-sm hover:bg-red-200 transition-colors">Delete Story</button>
       </div>
     </div>
+  </div>
 
-    <!-- Right: SEL Validation & Media Panels -->
-    <div class="lg:col-span-1">
-      <!-- SEL Validation Panel -->
-      <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6 sticky top-8">
-        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">SEL Validation</h2>
+  <!-- TAB: BEATS -->
+  <div id="tab-beats" class="tab-panel hidden">
+    <div class="max-w-3xl">
+      <div class="space-y-4" id="beatsContainer">
+        {beats.map((beat) => {
+          const colors = BEAT_COLORS[beat.beat as BeatType];
+          const label = BEAT_LABELS[beat.beat as BeatType];
+          const description = BEAT_DESCRIPTIONS[beat.beat as BeatType];
+          return (
+            <div class={`rounded-xl border-l-4 p-6 ${colors}`} data-beat={beat.beat}>
+              <div class="flex items-start justify-between mb-4 cursor-pointer beat-toggle">
+                <div class="flex-1">
+                  <h3 class="text-base font-semibold text-[var(--color-v-dark)]">{label}</h3>
+                  <p class="text-xs text-[var(--color-v-gray)] italic mt-1">{description}</p>
+                </div>
+              </div>
+              <div class="beat-content space-y-4">
+                <div>
+                  <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Story Content</label>
+                  <textarea class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)] text-sm" rows="4" data-field="content" data-beat={beat.beat}>{beat.content}</textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Emotion & Energy</label>
+                    <input type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)] text-sm" placeholder="e.g. Anxious/medium" data-field="emotion_energy" data-beat={beat.beat} value={beat.emotion_energy} />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Duration (seconds)</label>
+                    <input type="number" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)] text-sm" min="0" data-field="duration_seconds" data-beat={beat.beat} value={beat.duration_seconds} />
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Narrator Line</label>
+                  <textarea class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)] text-sm" rows="2" placeholder="What the narrator says" data-field="narrator_line" data-beat={beat.beat}>{beat.narrator_line}</textarea>
+                </div>
+                <div>
+                  <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Visual Notes (for animator)</label>
+                  <textarea class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)] text-sm" rows="2" placeholder="Shot, animation, visual style notes" data-field="visual_notes" data-beat={beat.beat}>{beat.visual_notes}</textarea>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <button id="saveBeatsBtn" class="mt-6 w-full py-3 bg-[var(--color-v-teal)] text-white rounded-xl font-semibold hover:opacity-90 transition-opacity">
+        Save All Beats
+      </button>
+    </div>
+  </div>
 
-        <!-- Progress -->
+  <!-- TAB: SEL REVIEW -->
+  <div id="tab-sel" class="tab-panel hidden">
+    <div class="max-w-lg">
+      <div class="bg-white rounded-xl border border-gray-100 p-6">
+        <h2 class="text-base font-semibold text-[var(--color-v-dark)] mb-6">SEL Validation</h2>
+
         <div class="mb-6 pb-6 border-b border-gray-100">
           <div class="flex items-center justify-between mb-2">
             <p class="text-sm text-[var(--color-v-gray)]">Checks Complete</p>
-            <p class="text-2xl font-bold text-[var(--color-v-teal)]">{selChecks}/6</p>
+            <p class="text-3xl font-bold text-[var(--color-v-teal)]">{selChecks}<span class="text-lg text-[var(--color-v-gray)]">/6</span></p>
           </div>
           <div class="w-full bg-gray-100 rounded-full h-2">
-            <div class="bg-[var(--color-v-teal)] h-2 rounded-full transition-all" style={`width: ${(selChecks / 6) * 100}%`}></div>
+            <div class="bg-[var(--color-v-teal)] h-2 rounded-full" id="selProgress" style={`width: ${(selChecks / 6) * 100}%`}></div>
           </div>
         </div>
 
-        <!-- Checkboxes -->
         <div class="space-y-3 mb-6">
-          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
-            <input
-              type="checkbox"
-              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
-              id="check_emotion"
-              checked={storyData.sel_emotion_accurate}
-            />
-            <span class="text-sm text-[var(--color-v-dark)]">Emotion Accurate?</span>
-          </label>
-          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
-            <input
-              type="checkbox"
-              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
-              id="check_tool"
-              checked={storyData.sel_tool_evidence_based}
-            />
-            <span class="text-sm text-[var(--color-v-dark)]">Tool Evidence-Based?</span>
-          </label>
-          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
-            <input
-              type="checkbox"
-              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
-              id="check_resolution"
-              checked={storyData.sel_resolution_realistic}
-            />
-            <span class="text-sm text-[var(--color-v-dark)]">Resolution Realistic?</span>
-          </label>
-          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
-            <input
-              type="checkbox"
-              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
-              id="check_safe"
-              checked={storyData.sel_content_safe}
-            />
-            <span class="text-sm text-[var(--color-v-dark)]">Content Safe?</span>
-          </label>
-          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
-            <input
-              type="checkbox"
-              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
-              id="check_message"
-              checked={storyData.sel_message_clear}
-            />
-            <span class="text-sm text-[var(--color-v-dark)]">Message Clear?</span>
-          </label>
-          <label class="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors">
-            <input
-              type="checkbox"
-              class="w-4 h-4 rounded border-gray-300 text-[var(--color-v-teal)] focus:ring-[var(--color-v-teal)]"
-              id="check_cultural"
-              checked={storyData.sel_cultural_check}
-            />
-            <span class="text-sm text-[var(--color-v-dark)]">Cultural Check?</span>
-          </label>
+          {[
+            { id: 'check_emotion', label: 'Emotion Accurate?', checked: story.sel_emotion_accurate },
+            { id: 'check_tool', label: 'Tool Evidence-Based?', checked: story.sel_tool_evidence_based },
+            { id: 'check_resolution', label: 'Resolution Realistic?', checked: story.sel_resolution_realistic },
+            { id: 'check_safe', label: 'Content Safe?', checked: story.sel_content_safe },
+            { id: 'check_message', label: 'Message Clear?', checked: story.sel_message_clear },
+            { id: 'check_cultural', label: 'Cultural Check?', checked: story.sel_cultural_check },
+          ].map(item => (
+            <label class="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-gray-50 transition-colors">
+              <input type="checkbox" id={item.id} checked={item.checked} class="w-4 h-4 rounded border-gray-300 accent-[var(--color-v-teal)]" />
+              <span class="text-sm text-[var(--color-v-dark)]">{item.label}</span>
+            </label>
+          ))}
         </div>
 
-        <!-- Review Notes -->
-        <div class="mb-6 pb-6 border-b border-gray-100">
+        <div class="mb-6">
           <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Review Notes</label>
-          <textarea
-            id="reviewNotes"
-            rows="3"
-            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
-            placeholder="SEL reviewer notes..."
-          >{storyData.sel_review_notes || ''}</textarea>
+          <textarea id="reviewNotes" rows="4" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" placeholder="SEL reviewer notes...">{story.sel_review_notes || ''}</textarea>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="space-y-2">
-          <button
-            id="approveSELBtn"
-            class="w-full px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-          >
-            Approve SEL
-          </button>
-          <button
-            id="requestRevisionBtn"
-            class="w-full px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors"
-          >
-            Request Revision
-          </button>
-        </div>
-      </div>
-
-      <!-- Media Production Panel -->
-      <div class="bg-white rounded-xl border border-gray-100 p-6">
-        <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-4">Media Production</h2>
-
-        <div class="space-y-4">
-          <!-- Storyboard URL -->
-          <div>
-            <label for="storyboardUrl" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
-              Storyboard URL
-            </label>
-            <input
-              type="url"
-              id="storyboardUrl"
-              placeholder="https://..."
-              class="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
-              value={storyData.storyboard_url || ''}
-            />
-          </div>
-
-          <!-- Animation Status -->
-          <div>
-            <label for="animationStatus" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
-              Animation Status
-            </label>
-            <select
-              id="animationStatus"
-              class="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
-            >
-              <option value="">Not started</option>
-              <option value="in_progress" selected={storyData.animation_status === 'in_progress'}>In Progress</option>
-              <option value="complete" selected={storyData.animation_status === 'complete'}>Complete</option>
-            </select>
-          </div>
-
-          <!-- Voiceover Status -->
-          <div>
-            <label for="voiceoverStatus" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
-              Voiceover Status
-            </label>
-            <select
-              id="voiceoverStatus"
-              class="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
-            >
-              <option value="">Not started</option>
-              <option value="in_progress" selected={storyData.voiceover_status === 'in_progress'}>In Progress</option>
-              <option value="complete" selected={storyData.voiceover_status === 'complete'}>Complete</option>
-            </select>
-          </div>
-
-          <!-- Media Notes -->
-          <div>
-            <label for="mediaNotes" class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">
-              Media Notes (for David)
-            </label>
-            <textarea
-              id="mediaNotes"
-              rows="3"
-              class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]"
-              placeholder="Production notes..."
-            >{storyData.media_notes || ''}</textarea>
-          </div>
-
-          <!-- Save Media Button -->
-          <button
-            id="saveMediaBtn"
-            class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            Save Media Info
-          </button>
+        <div class="flex gap-3">
+          <button id="approveSELBtn" class="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">✓ Approve SEL</button>
+          <button id="requestRevisionBtn" class="flex-1 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors">↩ Request Revision</button>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- TAB: PRODUCTION -->
+  <div id="tab-production" class="tab-panel hidden">
+    <div class="max-w-lg">
+      <div class="bg-white rounded-xl border border-gray-100 p-6">
+        <h2 class="text-base font-semibold text-[var(--color-v-dark)] mb-6">Media Production</h2>
+        <div class="space-y-5">
+          <div>
+            <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Storyboard URL</label>
+            <input type="url" id="storyboardUrl" placeholder="https://..." value={story.storyboard_url || ''} class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" />
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Animation Status</label>
+              <select id="animationStatus" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]">
+                <option value="">Not started</option>
+                <option value="in_progress" selected={story.animation_status === 'in_progress'}>In Progress</option>
+                <option value="complete" selected={story.animation_status === 'complete'}>Complete</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Voiceover Status</label>
+              <select id="voiceoverStatus" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]">
+                <option value="">Not started</option>
+                <option value="in_progress" selected={story.voiceover_status === 'in_progress'}>In Progress</option>
+                <option value="complete" selected={story.voiceover_status === 'complete'}>Complete</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-[var(--color-v-dark)] mb-2">Media Notes</label>
+            <textarea id="mediaNotes" rows="4" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-v-teal)]" placeholder="Production notes for David...">{story.media_notes || ''}</textarea>
+          </div>
+          <button id="saveMediaBtn" class="w-full py-2 bg-[var(--color-v-teal)] text-white rounded-lg text-sm font-medium hover:opacity-90">Save Production Info</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: NARRATOR -->
+  <div id="tab-narrator" class="tab-panel hidden">
+    <div class="max-w-2xl">
+      {narratorLines.length === 0 ? (
+        <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-8 text-center">
+          <p class="text-2xl mb-3">🎙</p>
+          <p class="text-sm font-medium text-[var(--color-v-dark)] mb-1">No narrator lines yet</p>
+          <p class="text-xs text-[var(--color-v-gray)]">Add narrator lines in the Beats tab, or add narrator opening/closing in the Video settings.</p>
+        </div>
+      ) : (
+        <div class="bg-[var(--color-v-dark)] rounded-xl p-8 text-white">
+          <div class="flex items-center justify-between mb-8">
+            <div>
+              <h2 class="text-lg font-semibold">Narrator Script</h2>
+              <p class="text-xs text-gray-400 mt-1">{narratorLines.length} lines · Read in sequence</p>
+            </div>
+            <button id="copyNarratorBtn" class="text-xs px-3 py-1.5 border border-gray-600 text-gray-300 rounded-lg hover:border-white hover:text-white transition-all">
+              Copy Script
+            </button>
+          </div>
+          <div class="space-y-8">
+            {narratorLines.map((line) => (
+              <div class="flex gap-5">
+                <div class="shrink-0 w-12 text-right pt-1">
+                  <span class="text-xs font-mono text-[var(--color-v-teal)] font-bold">{line.timestamp}</span>
+                </div>
+                <div class="border-l border-gray-700 pl-5 pb-2">
+                  <p class="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">{line.label}</p>
+                  <p class="text-base leading-relaxed text-gray-100 italic">"{line.text}"</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+
+  <!-- TAB: BOOK -->
+  <div id="tab-book" class="tab-panel hidden">
+    <div class="max-w-2xl">
+      <div class="bg-white rounded-xl border border-gray-100 p-8">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-lg font-semibold text-[var(--color-v-dark)]">Book Story</h2>
+            <p class="text-xs text-[var(--color-v-gray)] mt-1">Polished children's book prose, ready for publishing</p>
+          </div>
+          <div class="flex gap-2">
+            <button id="copyBookBtn" class={`text-xs px-3 py-1.5 border border-[var(--color-v-teal)] text-[var(--color-v-teal)] rounded-lg hover:bg-[var(--color-v-teal)] hover:text-white transition-all ${!savedBookText ? 'hidden' : ''}`}>Copy</button>
+            <button id="generateBookBtn" class="text-xs px-3 py-1.5 bg-[var(--color-v-teal)] text-white rounded-lg hover:opacity-90 transition-opacity">
+              {savedBookText ? 'Regenerate' : '✨ Generate'}
+            </button>
+          </div>
+        </div>
+
+        <div id="bookLoading" class="hidden text-center py-12">
+          <div class="inline-block w-10 h-10 border-4 border-[var(--color-v-teal)] border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p class="text-sm text-[var(--color-v-gray)]">Claude is writing the story...</p>
+        </div>
+
+        <div id="bookContent">
+          {savedBookText ? (
+            <p id="bookText" class="text-base leading-relaxed text-[var(--color-v-dark)] whitespace-pre-wrap" style="font-family: Georgia, serif">{savedBookText}</p>
+          ) : (
+            <div class="text-center py-12 text-[var(--color-v-gray)]">
+              <p class="text-4xl mb-4">📖</p>
+              <p class="text-sm">Click Generate to create the book version of this story.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: PROMPTS -->
+  <div id="tab-prompts" class="tab-panel hidden">
+    <div class="max-w-3xl">
+      <!-- Type selector -->
+      <div class="flex gap-3 mb-6">
+        <button id="btnImage" class="flex-1 py-3 px-4 rounded-xl text-sm font-semibold border-2 border-[var(--color-v-teal)] bg-[var(--color-v-teal)] text-white transition-all">
+          📸 Image — nanobanana
+        </button>
+        <button id="btnVideo" class="flex-1 py-3 px-4 rounded-xl text-sm font-semibold border-2 border-gray-200 text-[var(--color-v-gray)] transition-all">
+          🎥 Video — Grok
+        </button>
+      </div>
+
+      <button id="generatePromptsBtn" class="w-full py-3 bg-[var(--color-v-teal)] text-white rounded-xl font-semibold hover:opacity-90 transition-opacity mb-6">
+        Generate Prompts
+      </button>
+
+      <div id="promptsLoading" class="hidden text-center py-12">
+        <div class="inline-block w-10 h-10 border-4 border-[var(--color-v-teal)] border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-sm text-[var(--color-v-gray)]">Generating prompts with Claude...</p>
+      </div>
+
+      <div id="promptsResults" class={savedImagePrompts.length > 0 ? '' : 'hidden'}>
+        <div class="flex items-center justify-between mb-4">
+          <p id="promptCount" class="text-sm font-semibold text-[var(--color-v-dark)]">
+            {savedImagePrompts.length > 0 ? `${savedImagePrompts.length} prompts saved` : ''}
+          </p>
+          <button id="copyAllPromptsBtn" class="text-xs px-3 py-1.5 border border-[var(--color-v-teal)] text-[var(--color-v-teal)] rounded-lg hover:bg-[var(--color-v-teal)] hover:text-white transition-all">
+            Copy All
+          </button>
+        </div>
+        <div id="promptsList" class="space-y-3">
+          {savedImagePrompts.map((prompt, idx) => (
+            <div class="bg-gray-50 rounded-lg p-4 relative group">
+              <p class="text-xs text-[var(--color-v-gray)] font-bold mb-2">#{idx + 1}</p>
+              <p class="text-sm text-[var(--color-v-dark)] leading-relaxed">{prompt}</p>
+              <button class="copy-single-btn absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-xs px-2 py-1 bg-white border border-gray-200 rounded hover:border-[var(--color-v-teal)] transition-all" data-prompt={prompt}>Copy</button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div id="promptsError" class="hidden">
+        <p id="promptsErrorMsg" class="text-sm text-red-600 bg-red-50 rounded-lg p-4"></p>
+      </div>
+    </div>
+  </div>
+
 </DashboardLayout>
 
-<script>
-  const storyId = window.location.pathname.split('/').pop();
+<script define:vars={{ storyId: id, narratorLines, storyTitle: story.title, savedImagePrompts, savedVideoPrompts, savedBookText }}>
 
-  // Toggle beat sections
+  // ── TAB SWITCHING ──────────────────────────────────────────────
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  const tabPanels = document.querySelectorAll('.tab-panel');
+
+  function showTab(tabId) {
+    tabPanels.forEach(p => p.classList.add('hidden'));
+    tabBtns.forEach(b => {
+      const active = b.getAttribute('data-tab') === tabId;
+      b.classList.toggle('border-[var(--color-v-teal)]', active);
+      b.classList.toggle('text-[var(--color-v-teal)]', active);
+      b.classList.toggle('border-transparent', !active);
+      b.classList.toggle('text-[var(--color-v-gray)]', !active);
+    });
+    const panel = document.getElementById(`tab-${tabId}`);
+    if (panel) panel.classList.remove('hidden');
+    history.replaceState(null, '', `#${tabId}`);
+  }
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => showTab(btn.getAttribute('data-tab')));
+  });
+
+  const initialTab = location.hash.replace('#', '') || 'beats';
+  showTab(initialTab);
+
+  // ── BEATS ──────────────────────────────────────────────────────
   document.querySelectorAll('.beat-toggle').forEach(el => {
-    el.addEventListener('click', function() {
-      (this as HTMLElement).closest('[data-beat]')?.classList.toggle('beat-collapsed');
-    });
+    el.addEventListener('click', () => el.closest('[data-beat]')?.classList.toggle('beat-collapsed'));
   });
+  const beatStyle = document.createElement('style');
+  beatStyle.textContent = `[data-beat].beat-collapsed .beat-content { display: none; }`;
+  document.head.appendChild(beatStyle);
 
-  // Style collapsed beats
-  const style = document.createElement('style');
-  style.textContent = `
-    [data-beat].beat-collapsed .beat-content {
-      display: none;
-    }
-  `;
-  document.head.appendChild(style);
-
-  // Save beats
-  const saveBeatsBtn = document.getElementById('saveBeatsBtn');
-  if (saveBeatsBtn) {
-    saveBeatsBtn.addEventListener('click', async () => {
-      const beats = [];
-      document.querySelectorAll('div[data-beat]').forEach(beatEl => {
-        const beatType = beatEl.getAttribute('data-beat');
-        const content = (beatEl.querySelector('[data-field="content"]') as HTMLTextAreaElement)?.value || '';
-        const emotion_energy = (beatEl.querySelector('[data-field="emotion_energy"]') as HTMLInputElement)?.value || '';
-        const narrator_line = (beatEl.querySelector('[data-field="narrator_line"]') as HTMLTextAreaElement)?.value || '';
-        const visual_notes = (beatEl.querySelector('[data-field="visual_notes"]') as HTMLTextAreaElement)?.value || '';
-        const duration_seconds = parseInt((beatEl.querySelector('[data-field="duration_seconds"]') as HTMLInputElement)?.value || '0');
-
-        beats.push({
-          beat: beatType,
-          content: content || null,
-          emotion_energy: emotion_energy || null,
-          narrator_line: narrator_line || null,
-          visual_notes: visual_notes || null,
-          duration_seconds: duration_seconds || null,
-        });
+  document.getElementById('saveBeatsBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('saveBeatsBtn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    const beats = [];
+    document.querySelectorAll('div[data-beat]').forEach(el => {
+      beats.push({
+        beat: el.getAttribute('data-beat'),
+        content: el.querySelector('[data-field="content"]')?.value || null,
+        emotion_energy: el.querySelector('[data-field="emotion_energy"]')?.value || null,
+        narrator_line: el.querySelector('[data-field="narrator_line"]')?.value || null,
+        visual_notes: el.querySelector('[data-field="visual_notes"]')?.value || null,
+        duration_seconds: parseInt(el.querySelector('[data-field="duration_seconds"]')?.value || '0') || null,
       });
-
-      try {
-        const response = await fetch(`/api/stories/${storyId}/beats`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(beats),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          alert('Error saving beats: ' + (error.error || 'Unknown error'));
-          return;
-        }
-
-        alert('Beats saved successfully!');
-      } catch (error) {
-        alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
-      }
     });
-  }
-
-  // SEL Validation
-  const updateProgress = () => {
-    const checks = [
-      (document.getElementById('check_emotion') as HTMLInputElement).checked,
-      (document.getElementById('check_tool') as HTMLInputElement).checked,
-      (document.getElementById('check_resolution') as HTMLInputElement).checked,
-      (document.getElementById('check_safe') as HTMLInputElement).checked,
-      (document.getElementById('check_message') as HTMLInputElement).checked,
-      (document.getElementById('check_cultural') as HTMLInputElement).checked,
-    ];
-    const count = checks.filter(Boolean).length;
-    const progressBar = document.querySelector('.bg-\\[var\\(--color-v-teal\\)\\]');
-    if (progressBar) {
-      (progressBar as HTMLElement).style.width = `${(count / 6) * 100}%`;
+    try {
+      const res = await fetch(`/api/stories/${storyId}/beats`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(beats) });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      btn.textContent = '✓ Saved!';
+      setTimeout(() => { btn.textContent = 'Save All Beats'; btn.disabled = false; }, 2000);
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.textContent = 'Save All Beats'; btn.disabled = false;
     }
-  };
-
-  document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.addEventListener('change', updateProgress);
   });
 
-  // Approve SEL
-  const approveSELBtn = document.getElementById('approveSELBtn');
-  if (approveSELBtn) {
-    approveSELBtn.addEventListener('click', async () => {
-      const checks = {
-        sel_emotion_accurate: (document.getElementById('check_emotion') as HTMLInputElement).checked,
-        sel_tool_evidence_based: (document.getElementById('check_tool') as HTMLInputElement).checked,
-        sel_resolution_realistic: (document.getElementById('check_resolution') as HTMLInputElement).checked,
-        sel_content_safe: (document.getElementById('check_safe') as HTMLInputElement).checked,
-        sel_message_clear: (document.getElementById('check_message') as HTMLInputElement).checked,
-        sel_cultural_check: (document.getElementById('check_cultural') as HTMLInputElement).checked,
-        sel_review_notes: (document.getElementById('reviewNotes') as HTMLTextAreaElement).value || null,
-        sel_approved: true,
-        status: 'sel_approved',
-        sel_reviewed_at: new Date().toISOString(),
-      };
+  // ── OVERVIEW EDIT ──────────────────────────────────────────────
+  document.getElementById('editStoryBtn')?.addEventListener('click', () => {
+    document.getElementById('editStoryForm').classList.toggle('hidden');
+  });
+  document.getElementById('cancelEditBtn')?.addEventListener('click', () => {
+    document.getElementById('editStoryForm').classList.add('hidden');
+  });
+  document.getElementById('saveStoryBtn')?.addEventListener('click', async () => {
+    const body = {
+      title: document.getElementById('edit_title').value,
+      sel_tool_modeled: document.getElementById('edit_selTool').value || null,
+      key_phrase: document.getElementById('edit_keyPhrase').value || null,
+      situation_description: document.getElementById('edit_situation').value || null,
+      duration_minutes: parseInt(document.getElementById('edit_duration').value) || 5,
+    };
+    const res = await fetch(`/api/stories/${storyId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.ok) { window.location.reload(); } else { alert('Error saving'); }
+  });
+  document.getElementById('deleteStoryBtn')?.addEventListener('click', async () => {
+    if (!confirm('Delete this story? This cannot be undone.')) return;
+    const res = await fetch(`/api/stories/${storyId}`, { method: 'DELETE' });
+    if (res.ok) { window.location.href = '/dashboard/stories'; } else { alert('Error deleting'); }
+  });
 
-      try {
-        const response = await fetch(`/api/stories/${storyId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(checks),
-        });
+  // ── SEL REVIEW ────────────────────────────────────────────────
+  const selCheckIds = ['check_emotion','check_tool','check_resolution','check_safe','check_message','check_cultural'];
+  function updateSelProgress() {
+    const count = selCheckIds.filter(id => document.getElementById(id)?.checked).length;
+    const bar = document.getElementById('selProgress');
+    if (bar) bar.style.width = `${(count / 6) * 100}%`;
+  }
+  selCheckIds.forEach(id => document.getElementById(id)?.addEventListener('change', updateSelProgress));
 
-        if (!response.ok) {
-          const error = await response.json();
-          alert('Error: ' + (error.error || 'Unknown error'));
-          return;
-        }
+  document.getElementById('approveSELBtn')?.addEventListener('click', async () => {
+    const body = {
+      sel_emotion_accurate: document.getElementById('check_emotion')?.checked,
+      sel_tool_evidence_based: document.getElementById('check_tool')?.checked,
+      sel_resolution_realistic: document.getElementById('check_resolution')?.checked,
+      sel_content_safe: document.getElementById('check_safe')?.checked,
+      sel_message_clear: document.getElementById('check_message')?.checked,
+      sel_cultural_check: document.getElementById('check_cultural')?.checked,
+      sel_review_notes: document.getElementById('reviewNotes')?.value || null,
+      sel_approved: true, status: 'sel_approved', sel_reviewed_at: new Date().toISOString(),
+    };
+    const res = await fetch(`/api/stories/${storyId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.ok) { alert('SEL Approved!'); window.location.reload(); } else { alert('Error'); }
+  });
+  document.getElementById('requestRevisionBtn')?.addEventListener('click', async () => {
+    const notes = document.getElementById('reviewNotes')?.value;
+    if (!notes?.trim()) { alert('Add review notes before requesting revision.'); return; }
+    const res = await fetch(`/api/stories/${storyId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'sel_revision', sel_review_notes: notes, sel_reviewed_at: new Date().toISOString() }) });
+    if (res.ok) { alert('Revision requested!'); window.location.reload(); } else { alert('Error'); }
+  });
 
-        alert('Story approved! Reloading...');
-        window.location.reload();
-      } catch (error) {
-        alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
-      }
+  // ── PRODUCTION ────────────────────────────────────────────────
+  document.getElementById('saveMediaBtn')?.addEventListener('click', async () => {
+    const body = {
+      storyboard_url: document.getElementById('storyboardUrl')?.value || null,
+      animation_status: document.getElementById('animationStatus')?.value || null,
+      voiceover_status: document.getElementById('voiceoverStatus')?.value || null,
+      media_notes: document.getElementById('mediaNotes')?.value || null,
+    };
+    const res = await fetch(`/api/stories/${storyId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.ok) { alert('Production info saved!'); } else { alert('Error saving'); }
+  });
+
+  // ── NARRATOR ──────────────────────────────────────────────────
+  document.getElementById('copyNarratorBtn')?.addEventListener('click', function() {
+    const text = `NARRATOR SCRIPT — "${storyTitle}"\n\n` +
+      narratorLines.map(l => `[${l.timestamp} — ${l.label}]\n"${l.text}"`).join('\n\n');
+    navigator.clipboard.writeText(text);
+    this.textContent = 'Copied!';
+    setTimeout(() => { this.textContent = 'Copy Script'; }, 2000);
+  });
+
+  // ── BOOK ──────────────────────────────────────────────────────
+  let currentBookText = savedBookText;
+  document.getElementById('generateBookBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('generateBookBtn');
+    const loading = document.getElementById('bookLoading');
+    const content = document.getElementById('bookContent');
+    btn.disabled = true; btn.textContent = 'Writing...';
+    loading.classList.remove('hidden'); content.classList.add('hidden');
+    try {
+      const res = await fetch(`/api/stories/${storyId}/book`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      currentBookText = data.book_text;
+      content.innerHTML = `<p class="text-base leading-relaxed text-[var(--color-v-dark)] whitespace-pre-wrap" style="font-family: Georgia, serif">${data.book_text.replace(/</g,'&lt;')}</p>`;
+      document.getElementById('copyBookBtn')?.classList.remove('hidden');
+      btn.textContent = 'Regenerate';
+    } catch (err) {
+      content.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
+      btn.textContent = currentBookText ? 'Regenerate' : '✨ Generate';
+    } finally {
+      btn.disabled = false; loading.classList.add('hidden'); content.classList.remove('hidden');
+    }
+  });
+  document.getElementById('copyBookBtn')?.addEventListener('click', function() {
+    if (!currentBookText) return;
+    navigator.clipboard.writeText(currentBookText);
+    this.textContent = 'Copied!';
+    setTimeout(() => { this.textContent = 'Copy'; }, 2000);
+  });
+
+  // ── PROMPTS ───────────────────────────────────────────────────
+  let selectedPromptType = 'image';
+  let currentPrompts = savedImagePrompts;
+
+  function renderPrompts(prompts) {
+    const list = document.getElementById('promptsList');
+    const results = document.getElementById('promptsResults');
+    const count = document.getElementById('promptCount');
+    if (!prompts?.length) { results.classList.add('hidden'); return; }
+    list.innerHTML = '';
+    prompts.forEach((p, i) => {
+      const div = document.createElement('div');
+      div.className = 'bg-gray-50 rounded-lg p-4 relative group';
+      div.innerHTML = `<p class="text-xs text-[var(--color-v-gray)] font-bold mb-2">#${i+1}</p><p class="text-sm text-[var(--color-v-dark)] leading-relaxed">${p}</p><button class="copy-single-btn absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-xs px-2 py-1 bg-white border border-gray-200 rounded hover:border-[var(--color-v-teal)] transition-all" data-prompt="${p.replace(/"/g,'&quot;')}">Copy</button>`;
+      list.appendChild(div);
     });
+    list.querySelectorAll('.copy-single-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        navigator.clipboard.writeText(this.getAttribute('data-prompt'));
+        this.textContent = 'Copied!';
+        setTimeout(() => { this.textContent = 'Copy'; }, 1500);
+      });
+    });
+    count.textContent = `${prompts.length} prompts saved`;
+    results.classList.remove('hidden');
+    document.getElementById('copyAllPromptsBtn').onclick = () => {
+      navigator.clipboard.writeText(prompts.join('\n\n'));
+      const b = document.getElementById('copyAllPromptsBtn');
+      b.textContent = 'Copied!'; setTimeout(() => { b.textContent = 'Copy All'; }, 2000);
+    };
   }
 
-  // Request Revision
-  const requestRevisionBtn = document.getElementById('requestRevisionBtn');
-  if (requestRevisionBtn) {
-    requestRevisionBtn.addEventListener('click', async () => {
-      const reviewNotes = (document.getElementById('reviewNotes') as HTMLTextAreaElement).value;
-
-      if (!reviewNotes.trim()) {
-        alert('Please add revision notes before requesting changes.');
-        return;
-      }
-
-      const body = {
-        status: 'sel_revision',
-        sel_review_notes: reviewNotes,
-        sel_reviewed_at: new Date().toISOString(),
-      };
-
-      try {
-        const response = await fetch(`/api/stories/${storyId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          alert('Error: ' + (error.error || 'Unknown error'));
-          return;
-        }
-
-        alert('Revision requested! Reloading...');
-        window.location.reload();
-      } catch (error) {
-        alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
-      }
-    });
+  function selectPromptType(type) {
+    selectedPromptType = type;
+    const imgActive = type === 'image';
+    document.getElementById('btnImage').className = `flex-1 py-3 px-4 rounded-xl text-sm font-semibold border-2 transition-all ${imgActive ? 'border-[var(--color-v-teal)] bg-[var(--color-v-teal)] text-white' : 'border-gray-200 text-gray-500'}`;
+    document.getElementById('btnVideo').className = `flex-1 py-3 px-4 rounded-xl text-sm font-semibold border-2 transition-all ${!imgActive ? 'border-[var(--color-v-teal)] bg-[var(--color-v-teal)] text-white' : 'border-gray-200 text-gray-500'}`;
+    currentPrompts = imgActive ? savedImagePrompts : savedVideoPrompts;
+    renderPrompts(currentPrompts);
   }
 
-  // Save Media
-  const saveMediaBtn = document.getElementById('saveMediaBtn');
-  if (saveMediaBtn) {
-    saveMediaBtn.addEventListener('click', async () => {
-      const body = {
-        storyboard_url: (document.getElementById('storyboardUrl') as HTMLInputElement).value || null,
-        animation_status: (document.getElementById('animationStatus') as HTMLSelectElement).value || null,
-        voiceover_status: (document.getElementById('voiceoverStatus') as HTMLSelectElement).value || null,
-        media_notes: (document.getElementById('mediaNotes') as HTMLTextAreaElement).value || null,
-      };
+  document.getElementById('btnImage').addEventListener('click', () => selectPromptType('image'));
+  document.getElementById('btnVideo').addEventListener('click', () => selectPromptType('video'));
 
-      try {
-        const response = await fetch(`/api/stories/${storyId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
+  document.getElementById('generatePromptsBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('generatePromptsBtn');
+    const loading = document.getElementById('promptsLoading');
+    const error = document.getElementById('promptsError');
+    btn.disabled = true; btn.textContent = 'Generating...';
+    loading.classList.remove('hidden');
+    document.getElementById('promptsResults').classList.add('hidden');
+    error.classList.add('hidden');
+    try {
+      const res = await fetch(`/api/stories/${storyId}/prompts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: selectedPromptType }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      if (selectedPromptType === 'image') savedImagePrompts.splice(0, savedImagePrompts.length, ...data.prompts);
+      else savedVideoPrompts.splice(0, savedVideoPrompts.length, ...data.prompts);
+      currentPrompts = data.prompts;
+      renderPrompts(data.prompts);
+    } catch (err) {
+      document.getElementById('promptsErrorMsg').textContent = err.message;
+      error.classList.remove('hidden');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Generate Prompts'; loading.classList.add('hidden');
+    }
+  });
 
-        if (!response.ok) {
-          const error = await response.json();
-          alert('Error: ' + (error.error || 'Unknown error'));
-          return;
-        }
-
-        alert('Media information saved!');
-      } catch (error) {
-        alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
-      }
-    });
-  }
+  // Initialize prompts tab with saved data
+  renderPrompts(savedImagePrompts);
 </script>

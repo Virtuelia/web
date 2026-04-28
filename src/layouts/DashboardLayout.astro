@@ -1,7 +1,8 @@
 ---
 import '../styles/global.css';
 
-const { title = 'Virtuelia Dashboard' } = Astro.props;
+interface BreadcrumbItem { label: string; href?: string; }
+const { title = 'Virtuelia Dashboard', breadcrumb = [] } = Astro.props as { title?: string; breadcrumb?: BreadcrumbItem[] };
 const user = Astro.locals.user;
 
 const navItems = [
@@ -83,6 +84,21 @@ const currentPath = Astro.url.pathname;
 
     <!-- Main content -->
     <main class="flex-1 ml-64">
+      {breadcrumb.length > 0 && (
+        <div class="px-8 pt-6 pb-0">
+          <nav class="flex items-center gap-2 text-sm text-[var(--color-v-gray)]">
+            {breadcrumb.map((item, i) => (
+              <>
+                {i > 0 && <span class="text-gray-300">/</span>}
+                {item.href
+                  ? <a href={item.href} class="hover:text-[var(--color-v-teal)] transition-colors truncate max-w-[180px]">{item.label}</a>
+                  : <span class="text-[var(--color-v-dark)] font-medium truncate max-w-[200px]">{item.label}</span>
+                }
+              </>
+            ))}
+          </nav>
+        </div>
+      )}
       <div class="p-8">
         <slot />
       </div>
