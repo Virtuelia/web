@@ -18,6 +18,7 @@ const { data: story } = await supabase
 
 const savedImagePrompts: string[] = (story as any)?.image_prompts || [];
 const savedVideoPrompts: string[] = (story as any)?.video_prompts || [];
+const savedBookText: string = (story as any)?.book_text || '';
 
 if (!story) {
   return new Response('Story not found', { status: 404 });
@@ -145,6 +146,43 @@ const hasNarratorScript = narratorLines.length > 0;
         </div>
       )}
 
+      <!-- Book Story -->
+      <div class="bg-white rounded-xl border border-gray-100 p-8">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-lg font-semibold text-[var(--color-v-dark)]">📖 Book Story</h2>
+            <p class="text-xs text-[var(--color-v-gray)] mt-1">Polished prose version for publishing</p>
+          </div>
+          <div class="flex gap-2">
+            {savedBookText && (
+              <button id="copyBookBtn" class="text-xs px-3 py-1.5 border border-[var(--color-v-teal)] text-[var(--color-v-teal)] rounded-lg hover:bg-[var(--color-v-teal)] hover:text-white transition-all">
+                Copy
+              </button>
+            )}
+            <button id="generateBookBtn" class="text-xs px-3 py-1.5 bg-[var(--color-v-teal)] text-white rounded-lg hover:opacity-90 transition-opacity">
+              {savedBookText ? 'Regenerate' : '✨ Generate'}
+            </button>
+          </div>
+        </div>
+
+        <div id="bookLoading" class="hidden text-center py-8">
+          <div class="inline-block w-8 h-8 border-4 border-[var(--color-v-teal)] border-t-transparent rounded-full animate-spin mb-3"></div>
+          <p class="text-sm text-[var(--color-v-gray)]">Claude is writing the story...</p>
+        </div>
+
+        <div id="bookContent">
+          {savedBookText ? (
+            <div id="bookText" class="prose prose-sm max-w-none text-[var(--color-v-dark)] leading-relaxed whitespace-pre-wrap font-serif text-base">
+              {savedBookText}
+            </div>
+          ) : (
+            <div id="bookEmpty" class="text-center py-8">
+              <p class="text-sm text-[var(--color-v-gray)]">No book story generated yet.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
       <!-- Full script read view -->
       <div class="bg-white rounded-xl border border-gray-100 p-8">
         <h2 class="text-lg font-semibold text-[var(--color-v-dark)] mb-6">Full Script</h2>
@@ -261,7 +299,7 @@ const hasNarratorScript = narratorLines.length > 0;
   </div>
 </DashboardLayout>
 
-<script define:vars={{ storyId: id, savedImagePrompts, savedVideoPrompts, narratorLines, storyTitle: story.title }}>
+<script define:vars={{ storyId: id, savedImagePrompts, savedVideoPrompts, narratorLines, storyTitle: story.title, savedBookText }}>
   let selectedType = 'image';
 
   function renderSavedPrompts(prompts) {
@@ -315,6 +353,64 @@ const hasNarratorScript = narratorLines.length > 0;
       renderSavedPrompts(savedVideoPrompts);
     }
   }
+
+  // Book Story
+  let currentBookText = savedBookText;
+
+  document.getElementById('generateBookBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('generateBookBtn') as HTMLButtonElement;
+    const loading = document.getElementById('bookLoading')!;
+    const content = document.getElementById('bookContent')!;
+
+    btn.disabled = true;
+    btn.textContent = 'Writing...';
+    loading.classList.remove('hidden');
+    content.classList.add('hidden');
+
+    try {
+      const response = await fetch(`/api/stories/${storyId}/book`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Generation failed');
+
+      currentBookText = data.book_text;
+      content.innerHTML = `<div id="bookText" class="prose prose-sm max-w-none text-[var(--color-v-dark)] leading-relaxed whitespace-pre-wrap font-serif text-base">${data.book_text.replace(/</g, '&lt;')}</div>`;
+      content.classList.remove('hidden');
+
+      const copyBtn = document.getElementById('copyBookBtn');
+      if (copyBtn) {
+        copyBtn.classList.remove('hidden');
+      } else {
+        const newCopyBtn = document.createElement('button');
+        newCopyBtn.id = 'copyBookBtn';
+        newCopyBtn.className = 'text-xs px-3 py-1.5 border border-[var(--color-v-teal)] text-[var(--color-v-teal)] rounded-lg hover:bg-[var(--color-v-teal)] hover:text-white transition-all';
+        newCopyBtn.textContent = 'Copy';
+        btn.parentElement?.insertBefore(newCopyBtn, btn);
+        newCopyBtn.addEventListener('click', () => copyBook(newCopyBtn));
+      }
+      btn.textContent = 'Regenerate';
+    } catch (err) {
+      content.innerHTML = `<p class="text-sm text-red-600">${(err as Error).message}</p>`;
+      content.classList.remove('hidden');
+      btn.textContent = currentBookText ? 'Regenerate' : '✨ Generate';
+    } finally {
+      btn.disabled = false;
+      loading.classList.add('hidden');
+    }
+  });
+
+  function copyBook(btn: HTMLButtonElement) {
+    if (!currentBookText) return;
+    navigator.clipboard.writeText(currentBookText);
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  }
+
+  document.getElementById('copyBookBtn')?.addEventListener('click', function() {
+    copyBook(this as HTMLButtonElement);
+  });
 
   // Copy Narrator Script
   const copyNarratorBtn = document.getElementById('copyNarratorBtn');
